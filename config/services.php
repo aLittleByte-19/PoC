@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'bedrock' => [
+        'model_id' => env('BEDROCK_MODEL_ID', 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+
 ];
