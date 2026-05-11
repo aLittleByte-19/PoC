@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUM | Eggon Console</title>
+  <link rel="stylesheet" href="{{ asset('nexum-app/styles.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <img class="brand-logo" src="{{ asset('nexum-app/eggon_logo_43542.png') }}" alt="Eggon logo">
+      </div>
+
+      <nav class="side-nav" aria-label="Navigazione applicativo">
+        <div class="nav-section">
+          <p class="nav-section-title">Panoramica</p>
+          <button class="nav-item active" data-view="overview" data-target="workspace-top">Overview</button>
+          <button class="nav-subitem" data-view="overview" data-target="overview-modules">Moduli</button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">AI Assistant</p>
+          <button class="nav-item" data-view="assistant" data-target="workspace-top">Assistant</button>
+          <button class="nav-subitem" data-view="assistant" data-target="assistant-compose">Generazione</button>
+          <button class="nav-subitem" data-view="assistant" data-target="assistant-feedback">Qualità</button>
+          <button class="nav-subitem" data-view="assistant" data-target="assistant-library">Storico prompt</button>
+          <button class="nav-subitem" data-view="assistant" data-target="assistant-usage">Metriche</button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Co-Pilot CdL</p>
+          <button class="nav-item" data-view="copilot" data-target="workspace-top">Co-Pilot</button>
+          <button class="nav-subitem" data-view="copilot" data-target="copilot-upload">Caricamento</button>
+          <button class="nav-subitem" data-view="copilot" data-target="copilot-documents">Storico invii</button>
+          <button class="nav-subitem" data-view="copilot" data-target="copilot-quality">Metriche</button>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar" id="workspace-top">
+        <div>
+          <p class="eyebrow">NEXUM</p>
+          <h2 id="view-title">Overview operativa</h2>
+        </div>
+        <div class="session-actions">
+          <button class="profile-toggle" id="profile-toggle" type="button" aria-label="Apri menu profilo" aria-expanded="false">
+            <span id="profile-initials">--</span>
+          </button>
+          <div class="profile-menu hidden" id="profile-menu">
+            <strong id="profile-name">Utente</strong>
+            <span id="profile-email">Sessione attiva</span>
+            <a class="text-button" id="profile-users-link" href="/admin/users" target="_top">Gestione utenti</a>
+            <form id="profile-logout-form" method="POST" action="/poc/logout" target="_top">
+              <input id="profile-logout-token" type="hidden" name="_token" value="">
+              <button class="text-button" type="submit">Esci</button>
+            </form>
+          </div>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Attiva tema scuro" aria-pressed="false">
+            <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+            <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="view-stack">
+        <section class="view active" data-view="overview" aria-labelledby="view-title">
+          <article class="hero-card" id="overview-status">
+            <div>
+              <p class="eyebrow">Console operativa</p>
+              <h3>Gestione assistita di comunicazioni interne e documenti del personale.</h3>
+              <p>
+                NEXUM supporta redattori HR e operatori CdL nelle attività quotidiane: preparazione dei contenuti,
+                classificazione documentale, verifica degli esiti e tracciamento delle consegne.
+              </p>
+            </div>
+            <div class="button-row">
+              <button class="primary-button" data-jump="assistant" data-target="assistant-compose">Crea contenuto</button>
+              <button class="secondary-button" data-jump="copilot" data-target="copilot-upload">Carica documenti</button>
+            </div>
+          </article>
+
+          <article class="panel" id="overview-modules">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Moduli</p>
+                <h3>Da dove partire</h3>
+              </div>
+            </div>
+
+            <ul class="flow-list">
+              <li>
+                <strong>AI Assistant Generativo</strong>
+                <span>Scrivi il prompt, scegli pubblico, tono e canale. Il sistema propone una bozza da revisionare e inviare.</span>
+              </li>
+              <li>
+                <strong>AI Co-Pilot per CdL</strong>
+                <span>Carica un documento o un lotto. OCR e classificazione rilevano metadati, destinatari e split; l'operatore verifica solo le anomalie.</span>
+              </li>
+              <li>
+                <strong>Metriche operative</strong>
+                <span>Monitora utilizzo, qualità e performance direttamente nelle pagine dei due strumenti.</span>
+              </li>
+            </ul>
+          </article>
+
+          <article class="panel compact-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Oggi</p>
+                <h3>Priorità essenziali</h3>
+              </div>
+            </div>
+            <ul class="status-list" id="overview-priority-list">
+              <li><strong>0</strong><span>Bozze da rivedere</span></li>
+              <li><strong>0</strong><span>Invii con anomalie</span></li>
+              <li><strong>0</strong><span>Invii pronti</span></li>
+            </ul>
+          </article>
+        </section>
+
+        <section class="view" data-view="assistant">
+          <article class="panel flow-step" id="assistant-compose" data-step="assistant-compose">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">AI Assistant</p>
+                <h3>Crea una bozza</h3>
+              </div>
+            </div>
+
+            <p class="panel-note">
+              Inserisci cosa comunicare e pochi parametri editoriali. La bozza resta modificabile prima di salvarla o inviarla.
+            </p>
+
+            <div class="field-stack">
+              <label class="field">
+                <span>Prompt</span>
+                <textarea id="prompt-input" rows="5" placeholder="Descrivi il contenuto da generare"></textarea>
+              </label>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Pubblico</span>
+                  <select id="audience-select">
+                    <option>Tutti i dipendenti</option>
+                    <option>Manager e responsabili</option>
+                    <option>Team HR</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Tono</span>
+                  <select id="tone-select">
+                    <option>Chiaro e diretto</option>
+                    <option>Più istituzionale</option>
+                    <option>Più sintetico</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Stile</span>
+                  <select id="style-select">
+                    <option>Testo informativo</option>
+                    <option>Avviso operativo</option>
+                    <option>Aggiornamento breve</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Canale</span>
+                  <select id="channel-select">
+                    <option>Email interna</option>
+                    <option>News portale</option>
+                    <option>Notifica rapida</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button class="primary-button" id="generate-button">Genera bozza</button>
+              <button class="secondary-button" id="save-prompt-button">Salva prompt</button>
+            </div>
+
+            <p class="status-message" id="assistant-compose-note">La bozza comparirà nella revisione.</p>
+          </article>
+
+          <article class="panel flow-step locked" id="assistant-review" data-step="assistant-review" aria-disabled="true">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Revisione</p>
+                <h3>Controlla il contenuto</h3>
+              </div>
+            </div>
+
+            <div class="editor-stack">
+              <div class="cover-placeholder" id="cover-preview">
+                <span id="cover-label">Cover generata per il canale scelto</span>
+                <button class="text-button" id="cover-upload-button" type="button">Sostituisci cover</button>
+                <input class="hidden" id="cover-file-input" type="file" accept="image/png,image/jpeg,image/webp">
+              </div>
+
+              <label class="field">
+                <span>Titolo</span>
+                <input id="generated-title-input" type="text" value="" placeholder="Non disponibile">
+              </label>
+
+              <label class="field">
+                <span>Testo</span>
+                <textarea id="generated-body-input" rows="6" placeholder="Non disponibile"></textarea>
+              </label>
+
+              <div class="meta-row">
+                <span id="meta-chars">124 caratteri</span>
+                <span id="meta-time">1 min lettura</span>
+                <span>Creato da AI Assistant</span>
+                <span id="assistant-status">Bozza non generata</span>
+              </div>
+
+              <div class="recipient-box">
+                <div class="panel-heading">
+                  <div>
+                    <p class="eyebrow">Destinatari</p>
+                    <h3>Categoria e persone specifiche</h3>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Categoria</span>
+                    <select id="recipient-category-select">
+                      <option value="">Nessuna categoria</option>
+                      <option>Tutti i dipendenti</option>
+                      <option>Manager e responsabili</option>
+                      <option>Team HR</option>
+                      <option>Nuovi assunti</option>
+                      <option>Sedi operative</option>
+                    </select>
+                  </label>
+
+                  <label class="field">
+                    <span>Persone specifiche</span>
+                    <textarea id="recipient-email-input" rows="1" placeholder="nome@azienda.it, altro@azienda.it"></textarea>
+                  </label>
+                </div>
+
+                <p class="status-message">
+                  Puoi inviare a una categoria, a una o più persone, oppure a entrambi.
+                </p>
+              </div>
+
+              <label class="field compact-field">
+                <span>Formato esportazione</span>
+                <select id="export-format-select">
+                  <option>PDF</option>
+                  <option>DOCX</option>
+                  <option>HTML</option>
+                </select>
+              </label>
+
+              <div class="button-row">
+                <button class="secondary-button" id="cancel-draft-button">Annulla</button>
+                <button class="secondary-button" id="regenerate-button">Rigenera</button>
+                <button class="secondary-button" id="save-draft-button">Salva bozza</button>
+                <button class="secondary-button" id="export-button">Esporta</button>
+                <button class="primary-button" id="send-button">Invia</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel flow-step locked" id="assistant-feedback" data-step="assistant-feedback" aria-disabled="true">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Qualità</p>
+                <h3>Valuta la bozza</h3>
+              </div>
+            </div>
+
+            <div class="rating-row" aria-label="Valutazione da 1 a 5 stelle">
+              <button class="rating-button" type="button" data-rating="1" aria-label="1 stella">★</button>
+              <button class="rating-button" type="button" data-rating="2" aria-label="2 stelle">★</button>
+              <button class="rating-button" type="button" data-rating="3" aria-label="3 stelle">★</button>
+              <button class="rating-button" type="button" data-rating="4" aria-label="4 stelle">★</button>
+              <button class="rating-button" type="button" data-rating="5" aria-label="5 stelle">★</button>
+            </div>
+
+            <label class="field">
+              <span>Commento</span>
+              <textarea id="rating-comment" maxlength="240" rows="3" placeholder="Feedback opzionale"></textarea>
+            </label>
+
+            <div class="button-row">
+              <button class="primary-button" id="rating-submit-button">Invia valutazione</button>
+            </div>
+            <p class="status-message hidden" id="rating-note"></p>
+          </article>
+
+          <article class="panel" id="assistant-library">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Storico prompt</p>
+                <h3>Trova e riusa un prompt</h3>
+              </div>
+            </div>
+
+            <div class="filter-row">
+              <label class="field">
+                <span>Ricerca</span>
+                <input id="prompt-search" type="text" placeholder="Cerca prompt o risultato">
+              </label>
+              <label class="field">
+                <span>Filtro</span>
+                <select id="prompt-filter">
+                  <option value="">Tutti</option>
+                  <option value="preferito">Preferiti</option>
+                  <option value="email">Email interna</option>
+                  <option value="portale">Portale</option>
+                </select>
+              </label>
+            </div>
+
+            <ul class="history-list" id="prompt-history"></ul>
+
+            <p class="empty-note" id="prompt-empty">Nessun risultato trovato.</p>
+          </article>
+
+          <article class="panel compact-panel" id="assistant-usage">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Metriche</p>
+                <h3>Metriche AI Assistant</h3>
+              </div>
+            </div>
+
+            <div class="filter-row metrics-filter-row">
+              <label class="field">
+                <span>Periodo</span>
+                <select id="assistant-metric-period">
+                  <option>Ultimi 30 giorni</option>
+                  <option>Ultimi 7 giorni</option>
+                  <option>Mese corrente</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Canale</span>
+                <select id="assistant-metric-channel">
+                  <option>Tutti</option>
+                  <option>Email interna</option>
+                  <option>News portale</option>
+                  <option>Notifica rapida</option>
+                </select>
+              </label>
+            </div>
+
+            <ul class="status-list" id="assistant-metric-list">
+              <li><strong>0</strong><span>Contenuti generati</span></li>
+              <li><strong>0</strong><span>Bozze da rivedere</span></li>
+              <li><strong>0</strong><span>Feedback raccolti</span></li>
+              <li><strong>n/d</strong><span>Rating medio</span></li>
+            </ul>
+
+            <div class="metrics-detail-grid">
+              <div class="metric-block">
+                <p class="section-label">Utilizzo operativo</p>
+                <ul class="compact-list" id="assistant-usage-breakdown">
+                  <li><strong>0</strong><span>Contenuti disponibili</span></li>
+                </ul>
+              </div>
+
+              <div class="metric-block">
+                <p class="section-label">Qualità percepita</p>
+                <ul class="compact-list" id="assistant-rating-breakdown">
+                  <li><strong>n/d</strong><span>Feedback non disponibili</span></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="usage-feedback">
+              <p class="section-label">Feedback recenti</p>
+              <ul class="compact-list" id="assistant-feedback-list">
+                <li><strong>n/d</strong><span>Nessun feedback registrato</span></li>
+              </ul>
+            </div>
+
+            <div class="button-row">
+              <button class="secondary-button" id="analytics-export-button">Esporta report</button>
+            </div>
+            <p class="status-message hidden" id="analytics-status"></p>
+          </article>
+        </section>
+
+        <section class="view" data-view="copilot">
+          <article class="panel flow-step" id="copilot-upload" data-step="copilot-upload">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Co-Pilot CdL</p>
+                <h3>Carica nel repository</h3>
+              </div>
+            </div>
+
+            <p class="panel-note">
+              Il modello rileva automaticamente i campi del documento dopo il caricamento. L'utente può correggere manualmente i soli campi modificabili nella verifica.
+            </p>
+
+            <button class="upload-box" id="upload-box" type="button">
+              <strong>Seleziona o trascina un documento</strong>
+              <span>PDF o lotto mensile. Il sistema avvia l'analisi automaticamente.</span>
+            </button>
+            <input class="hidden" id="document-file-input" type="file" accept="application/pdf">
+
+            <ul class="compact-list">
+              <li><strong>Stato</strong><span id="upload-state">In attesa di caricamento</span></li>
+              <li><strong>Controlli automatici</strong><span>Formato e duplicati</span></li>
+              <li><strong>Output</strong><span id="upload-output">Le entry di invio compariranno nello storico sottostante.</span></li>
+            </ul>
+          </article>
+
+          <article class="panel" id="copilot-documents">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Storico invii</p>
+                <h3>Consulta gli invii</h3>
+              </div>
+            </div>
+
+            <p class="panel-note">
+              Archivio delle entry di invio generate dal modello. Ogni record rappresenta un destinatario e resta filtrabile senza trasformare la pagina in una lista infinita.
+            </p>
+
+            <ul class="status-list compact-kpi-list" id="document-summary-list">
+              <li><strong>0</strong><span>Risultati filtrati</span></li>
+              <li><strong>0</strong><span>Da verificare</span></li>
+              <li><strong>0</strong><span>Pronti per invio</span></li>
+              <li><strong>0</strong><span>Inviati</span></li>
+            </ul>
+
+            <div class="filter-row document-filter-grid">
+              <label class="field">
+                <span>Ricerca</span>
+                <input id="document-search" type="text" placeholder="Destinatario, azienda o file">
+              </label>
+              <label class="field">
+                <span>Stato invio</span>
+                <select id="document-delivery-filter">
+                  <option value="">Tutti</option>
+                  <option value="inviato">Inviati</option>
+                  <option value="non-inviato">Non inviati</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Confidenza</span>
+                <select id="document-confidence-mode">
+                  <option value="">Qualsiasi</option>
+                  <option value="lt">Minore di soglia</option>
+                  <option value="gte">Maggiore o uguale a soglia</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Soglia</span>
+                <input id="document-confidence-threshold" type="number" min="0" max="100" value="80">
+              </label>
+              <label class="field">
+                <span>Mese</span>
+                <select id="document-month-filter">
+                  <option value="">Tutti</option>
+                  <option value="03">Marzo</option>
+                  <option value="04">Aprile</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Anno</span>
+                <select id="document-year-filter">
+                  <option value="">Tutti</option>
+                  <option value="2026">2026</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Righe</span>
+                <select id="document-page-size-select">
+                  <option value="6">6 righe</option>
+                  <option value="10">10 righe</option>
+                  <option value="20">20 righe</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="filter-action-row">
+              <button class="secondary-button" id="document-reset-filters" type="button">Azzera filtri</button>
+              <span id="document-filter-status">Filtri predefiniti: tutti gli invii, soglia 80%.</span>
+            </div>
+
+            <div class="document-table" role="table" aria-label="Storico invii">
+              <div class="document-row document-row-head" role="row">
+                <span>Destinatario</span>
+                <span>Documento</span>
+                <span>File</span>
+                <span>Data</span>
+                <span>Conf.</span>
+                <span>Stato</span>
+                <span>Azioni</span>
+              </div>
+              <ul class="document-history" id="document-history"></ul>
+            </div>
+
+            <div class="pagination-row">
+              <span id="document-page-info">Pagina 1 di 1</span>
+              <div class="button-row">
+                <button class="secondary-button" id="document-prev-button" type="button">Precedenti</button>
+                <button class="secondary-button" id="document-next-button" type="button">Successivi</button>
+              </div>
+            </div>
+
+            <p class="empty-note hidden" id="document-empty">Nessun invio trovato.</p>
+          </article>
+
+          <article class="panel is-hidden" id="copilot-detail">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Dettaglio invio</p>
+                <h3 id="detail-title">Invio selezionato</h3>
+              </div>
+              <div class="button-row">
+                <button class="secondary-button" id="detail-edit-button" type="button">Modifica</button>
+                <button class="secondary-button hidden" id="detail-cancel-button" type="button">Annulla</button>
+                <button class="primary-button hidden" id="detail-save-button" type="button">Salva modifiche</button>
+              </div>
+            </div>
+
+            <div class="document-detail-grid">
+              <div class="document-preview">
+                <div class="preview-mode-row" role="tablist" aria-label="Anteprima documento">
+                  <button class="text-button active" type="button" data-detail-preview="original">Originale</button>
+                  <button class="text-button" type="button" data-detail-preview="split">Splittato</button>
+                  <button class="text-button" type="button" data-detail-preview="full">Completo</button>
+                </div>
+                <p class="eyebrow">Documento per destinatario</p>
+                <strong id="detail-preview-title">Documento</strong>
+                <span id="detail-preview-meta">Nome file e pagine</span>
+                <div class="document-preview-lines" id="detail-preview-lines"></div>
+              </div>
+
+              <div class="extracted-card document-inspector">
+                <div class="inspector-heading">
+                  <p class="section-label">Dati estratti dall'OCR</p>
+                  <div class="field-legend" aria-label="Legenda campi">
+                    <span><i class="legend-dot editable-dot"></i>Modificabile</span>
+                    <span><i class="legend-dot locked-dot"></i>Sola lettura</span>
+                  </div>
+                </div>
+                <div class="form-grid">
+                  <label class="field editable-field">
+                    <span>Nome e cognome</span>
+                    <input id="detail-employee-input" type="text" readonly>
+                  </label>
+
+                  <label class="field editable-field">
+                    <span>Azienda</span>
+                    <input id="detail-company-input" type="text" readonly>
+                  </label>
+
+                  <label class="field locked-field">
+                    <span>Nome file</span>
+                    <input id="detail-file-input" type="text" readonly>
+                  </label>
+
+                  <label class="field editable-field">
+                    <span>Data documento</span>
+                    <input id="detail-date-input" type="text" readonly>
+                  </label>
+
+                  <label class="field locked-field">
+                    <span>Numero pagine</span>
+                    <input id="detail-pages-input" type="text" readonly>
+                  </label>
+
+                  <label class="field editable-field">
+                    <span>Tipologia documento</span>
+                    <input id="detail-type-input" type="text" readonly>
+                  </label>
+
+                  <label class="field locked-field">
+                    <span>Confidenza</span>
+                    <input id="detail-confidence-input" type="text" readonly>
+                  </label>
+
+                  <label class="field locked-field">
+                    <span>Stato invio</span>
+                    <input id="detail-delivery-status-input" type="text" readonly>
+                  </label>
+
+                  <label class="field editable-field full-field">
+                    <span>Breve descrizione</span>
+                    <textarea id="detail-description-input" rows="3" readonly></textarea>
+                  </label>
+                </div>
+
+                <div class="button-row">
+                  <button class="primary-button" id="detail-send-button" type="button">Invia</button>
+                </div>
+                <p class="status-message" id="detail-status-message">Seleziona Modifica per correggere i campi consentiti.</p>
+              </div>
+            </div>
+
+            <div class="send-draft is-hidden" id="detail-send-draft">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Invio documento</p>
+                  <h3>Contenuto generato per l'invio</h3>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Destinatario</span>
+                  <input id="send-recipient-input" type="text">
+                </label>
+
+                <label class="field">
+                  <span>Oggetto</span>
+                  <input id="send-subject-input" type="text">
+                </label>
+
+                <label class="field full-field">
+                  <span>Testo</span>
+                  <textarea id="send-body-input" rows="4"></textarea>
+                </label>
+              </div>
+
+              <div class="button-row">
+                <button class="secondary-button" id="send-cancel-button" type="button">Annulla invio</button>
+                <button class="primary-button" id="send-confirm-button" type="button">Conferma invio</button>
+              </div>
+              <p class="status-message" id="send-status-message">Il documento del destinatario selezionato viene allegato automaticamente.</p>
+            </div>
+          </article>
+
+          <article class="panel compact-panel" id="copilot-quality">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Metriche Co-Pilot</p>
+                <h3>Qualità e performance OCR</h3>
+              </div>
+            </div>
+
+            <div class="filter-row metrics-filter-row">
+              <label class="field">
+                <span>Periodo</span>
+                <select id="copilot-metric-period">
+                  <option>Ultimi 30 giorni</option>
+                  <option>Ultimi 7 giorni</option>
+                  <option>Mese corrente</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Stato</span>
+                <select id="copilot-metric-status">
+                  <option>Tutti</option>
+                  <option>Inviato</option>
+                  <option>Non inviato</option>
+                  <option>Sotto soglia</option>
+                </select>
+              </label>
+            </div>
+
+            <ul class="status-list" id="copilot-metric-list">
+              <li><strong>0</strong><span>Documenti analizzati</span></li>
+              <li><strong>0</strong><span>Da verificare</span></li>
+              <li><strong>0</strong><span>Pronti per invio</span></li>
+              <li><strong>0</strong><span>Inviati</span></li>
+              <li><strong>n/d</strong><span>Tempo medio analisi</span></li>
+            </ul>
+
+            <div class="metrics-detail-grid">
+              <div class="metric-block">
+                <p class="section-label">Volumi e stato invii</p>
+                <ul class="compact-list" id="copilot-document-breakdown">
+                  <li><strong>0</strong><span>Documenti nel periodo</span></li>
+                  <li><strong>0</strong><span>Invii già completati</span></li>
+                  <li><strong>0</strong><span>Invii non completati</span></li>
+                </ul>
+              </div>
+
+              <div class="metric-block">
+                <p class="section-label">Qualità OCR</p>
+                <ul class="compact-list" id="copilot-quality-breakdown">
+                  <li><strong>80%</strong><span>Soglia di revisione umana</span></li>
+                  <li><strong>0</strong><span>Documenti sotto soglia</span></li>
+                  <li><strong>n/d</strong><span>Tempo medio per documento</span></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="button-row">
+              <button class="secondary-button" id="copilot-export-button" type="button">Esporta report</button>
+            </div>
+            <p class="status-message hidden" id="copilot-export-status"></p>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" type="button" aria-label="Torna su">↑</button>
+
+  <script src="{{ asset('nexum-app/app.js') }}"></script>
+</body>
+</html>
