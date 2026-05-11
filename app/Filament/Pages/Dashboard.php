@@ -12,15 +12,15 @@ use Filament\Pages\Dashboard as BaseDashboard;
 
 class Dashboard extends BaseDashboard
 {
-    protected static ?string $navigationGroup = 'Panoramica';
+    protected static ?string $navigationGroup = 'Amministrazione';
 
     protected static ?string $navigationIcon = 'heroicon-o-squares-2x2';
 
-    protected static ?string $navigationLabel = 'Overview';
+    protected static ?string $navigationLabel = 'Dashboard';
 
-    protected static ?int $navigationSort = -10;
+    protected static ?int $navigationSort = 0;
 
-    protected static ?string $title = 'Overview operativa';
+    protected static ?string $title = 'Amministrazione credenziali';
 
     protected static string $view = 'filament.pages.dashboard';
 

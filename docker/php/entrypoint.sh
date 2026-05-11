@@ -37,6 +37,19 @@ exit(App\Models\User::where('email', getenv('FILAMENT_ADMIN_EMAIL'))->exists() ?
 PHP
 }
 
+mark_filament_admin() {
+    FILAMENT_ADMIN_EMAIL="$1" php <<'PHP'
+<?php
+
+require 'vendor/autoload.php';
+
+$app = require 'bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+App\Models\User::where('email', getenv('FILAMENT_ADMIN_EMAIL'))->update(['is_admin' => true]);
+PHP
+}
+
 if [ "${COMPOSER_INSTALL_ON_STARTUP:-true}" = "true" ] && [ -f composer.json ]; then
     if [ -f composer.lock ]; then
         composer_hash="$(sha256sum composer.lock | awk '{ print $1 }')"
@@ -120,6 +133,8 @@ if [ "${LARAVEL_AUTOMATED_SETUP:-false}" = "true" ]; then
                 --password="$admin_password" \
                 --no-interaction
         fi
+
+        mark_filament_admin "$admin_email"
     fi
 
     touch "$setup_marker"
