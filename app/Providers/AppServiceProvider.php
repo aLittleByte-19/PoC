@@ -27,9 +27,12 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(BedrockService::class, function ($app) {
+            $bedrockEnabled = (bool) config('services.bedrock.enabled');
+
             return new BedrockService(
-                $app->make(BedrockRuntimeClient::class),
+                $bedrockEnabled ? $app->make(BedrockRuntimeClient::class) : null,
                 config('services.bedrock.model_id'),
+                $bedrockEnabled,
             );
         });
 

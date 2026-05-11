@@ -21,8 +21,12 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/framework/poc-setup-complete
 /storage/pail
 /vendor
+__pycache__/
+*.py[cod]
+.venv/
 CLAUDE.md
 /specs
 _ide_helper.php

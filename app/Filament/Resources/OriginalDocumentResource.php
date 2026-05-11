@@ -23,11 +23,15 @@ class OriginalDocumentResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-document-arrow-up';
 
-    protected static ?string $navigationLabel = 'AI Copilot';
+    protected static ?string $navigationGroup = 'Co-Pilot CdL';
+
+    protected static ?string $navigationLabel = 'Documenti analizzati';
+
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $modelLabel = 'Documento';
 
-    protected static ?string $pluralModelLabel = 'AI Copilot';
+    protected static ?string $pluralModelLabel = 'Documenti analizzati';
 
     public static function form(Form $form): Form
     {

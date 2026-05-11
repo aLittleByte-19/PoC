@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\OriginalDocumentResource\Pages;
 
 use App\Filament\Resources\OriginalDocumentResource;
-use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 
 class ListOriginalDocuments extends ListRecords
@@ -12,8 +11,6 @@ class ListOriginalDocuments extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\CreateAction::make(),
-        ];
+        return [];
     }
 }

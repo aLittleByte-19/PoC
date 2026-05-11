@@ -19,29 +19,50 @@ class CommunicationResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
 
-    protected static ?string $navigationLabel = 'AI Generativa';
+    protected static ?string $navigationGroup = 'AI Assistant';
+
+    protected static ?string $navigationLabel = 'Generazione contenuti';
+
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $modelLabel = 'Comunicazione';
 
-    protected static ?string $pluralModelLabel = 'AI Generativa';
+    protected static ?string $pluralModelLabel = 'Generazione contenuti';
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Forms\Components\Textarea::make('prompt')
-                    ->label('Contenuto richiesto')
+                    ->label('Prompt')
+                    ->helperText('Descrivi il contenuto da generare. La PoC produce una bozza revisionabile.')
                     ->required()
-                    ->rows(4)
+                    ->rows(5)
                     ->columnSpanFull(),
-                Forms\Components\TextInput::make('tone')
+                Forms\Components\Select::make('tone')
                     ->label('Tono')
-                    ->required()
-                    ->maxLength(100),
-                Forms\Components\TextInput::make('style')
+                    ->options([
+                        'Chiaro e diretto' => 'Chiaro e diretto',
+                        'Più istituzionale' => 'Più istituzionale',
+                        'Più sintetico' => 'Più sintetico',
+                        'Empatico' => 'Empatico',
+                        'Tecnico' => 'Tecnico',
+                    ])
+                    ->default('Chiaro e diretto')
+                    ->native(false)
+                    ->required(),
+                Forms\Components\Select::make('style')
                     ->label('Stile')
-                    ->required()
-                    ->maxLength(100),
+                    ->options([
+                        'Testo informativo' => 'Testo informativo',
+                        'Avviso operativo' => 'Avviso operativo',
+                        'Aggiornamento breve' => 'Aggiornamento breve',
+                        'News portale' => 'News portale',
+                        'Email interna' => 'Email interna',
+                    ])
+                    ->default('Testo informativo')
+                    ->native(false)
+                    ->required(),
             ]);
     }
 

@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\Log;
 class BedrockService
 {
     public function __construct(
-        private readonly BedrockRuntimeClient $client,
-        private readonly string $modelId,
+        private readonly ?BedrockRuntimeClient $client,
+        private readonly ?string $modelId,
+        private readonly bool $enabled = true,
     ) {}
 
     /**
@@ -22,6 +23,15 @@ class BedrockService
      */
     public function generateCommunication(string $prompt, string $tone, string $style): array
     {
+        if (! $this->enabled) {
+            return [
+                'title' => 'Bozza comunicazione NEXUM',
+                'body' => "Contenuto generato in modalita PoC con tono {$tone} e stile {$style}. Prompt di partenza: {$prompt}",
+            ];
+        }
+
+        $this->ensureConfigured();
+
         $userMessage = "Genera una comunicazione aziendale con tono '{$tone}' e stile '{$style}'.\n\nContenuto richiesto: {$prompt}\n\nRispondi SOLO con JSON valido con le chiavi: title (stringa), body (stringa).";
 
         try {
@@ -63,6 +73,14 @@ class BedrockService
      */
     public function splitDocument(string $pdfPath): array
     {
+        if (! $this->enabled) {
+            return [
+                ['employee_name' => 'Mario Rossi', 'start_page' => 1, 'end_page' => 1],
+            ];
+        }
+
+        $this->ensureConfigured();
+
         $pdfContent = base64_encode(file_get_contents(storage_path('app/'.$pdfPath)));
 
         $prompt = "Analizza questo PDF di cedolini aziendali. Identifica tutti i dipendenti presenti.\nPer ogni dipendente restituisci un array JSON con: employee_name (stringa), start_page (intero, 1-indexed), end_page (intero, 1-indexed).\nRispondi SOLO con JSON valido (array). Se non ci sono dipendenti distinti, restituisci un array vuoto.";
@@ -111,6 +129,20 @@ class BedrockService
      */
     public function extractFields(string $subPdfPath): array
     {
+        if (! $this->enabled) {
+            return [
+                'employee_first_name' => 'Mario',
+                'employee_last_name' => 'Rossi',
+                'company_name' => 'Azienda Demo Srl',
+                'document_date' => now()->toDateString(),
+                'document_type' => 'Cedolino',
+                'description' => 'Dati estratti in modalita PoC.',
+                'confidence_score' => (int) env('POC_CONFIDENCE_THRESHOLD', 80),
+            ];
+        }
+
+        $this->ensureConfigured();
+
         $pdfContent = base64_encode(file_get_contents(storage_path('app/'.$subPdfPath)));
 
         $prompt = "Estrai i seguenti campi da questo cedolino PDF.\nRispondi SOLO con JSON valido con le chiavi: employee_first_name, employee_last_name, company_name, document_date (formato YYYY-MM-DD), document_type, description (max 200 caratteri), confidence_score (intero 0-100 che indica la tua confidenza nell'estrazione).\nUsa null per i campi non trovati.";
@@ -155,6 +187,13 @@ class BedrockService
         } catch (AwsException $e) {
             Log::error('Bedrock extractFields error', ['path' => $subPdfPath, 'message' => $e->getMessage()]);
             throw new \RuntimeException('Errore nella chiamata a Bedrock (extract): '.$e->getMessage(), previous: $e);
+        }
+    }
+
+    private function ensureConfigured(): void
+    {
+        if (! $this->client || ! $this->modelId) {
+            throw new \RuntimeException('Bedrock non configurato: impostare BEDROCK_ENABLED=true e BEDROCK_MODEL_ID.');
         }
     }
 }
