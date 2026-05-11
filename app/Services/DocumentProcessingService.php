@@ -20,9 +20,16 @@ class DocumentProcessingService
      */
     public function handleUpload(UploadedFile $file): OriginalDocument
     {
-        $filename = $file->getClientOriginalName();
         $path = $file->store('documents/originals', 'local');
 
+        return $this->handleStoredFile($path, $file->getClientOriginalName());
+    }
+
+    /**
+     * Create an OriginalDocument from a file that is already stored on the local disk.
+     */
+    public function handleStoredFile(string $path, string $filename): OriginalDocument
+    {
         $original = OriginalDocument::create([
             'file_path' => $path,
             'original_filename' => $filename,
@@ -105,7 +112,7 @@ class DocumentProcessingService
         }
 
         $slug = preg_replace('/[^a-z0-9_]/i', '_', $employeeName);
-        $relativePath = "documents/sub/{$originalId}_{$slug}.pdf";
+        $relativePath = "documents/sub/{$originalId}_{$slug}_{$startPage}-{$endPage}.pdf";
         $absoluteDest = Storage::disk('local')->path($relativePath);
 
         Storage::disk('local')->makeDirectory('documents/sub');

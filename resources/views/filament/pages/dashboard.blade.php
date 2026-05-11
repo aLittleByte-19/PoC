@@ -44,10 +44,6 @@
                     <strong>AI Co-Pilot per CdL</strong>
                     <span>Carica un PDF. La PoC prepara estrazione, split e stato di lavorazione.</span>
                 </a>
-                <a href="{{ \App\Filament\Resources\CommunicationResource::getUrl('index') }}">
-                    <strong>Metriche operative</strong>
-                    <span>Consulta storico, qualita percepita e stato dei flussi direttamente dalle liste Filament.</span>
-                </a>
             </div>
         </section>
 

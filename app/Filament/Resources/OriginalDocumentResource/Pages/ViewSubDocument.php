@@ -48,36 +48,35 @@ class ViewSubDocument extends Page
     public function infolist(Infolist $infolist): Infolist
     {
         return $infolist
-            ->record($this->subDocument->extractedData)
+            ->record($this->subDocument)
             ->schema([
                 Infolists\Components\Grid::make(2)
                     ->schema([
                         Infolists\Components\Section::make('Dati estratti')
                             ->schema([
-                                Infolists\Components\TextEntry::make('employee_first_name')
+                                Infolists\Components\TextEntry::make('extractedData.employee_first_name')
                                     ->label('Nome'),
-                                Infolists\Components\TextEntry::make('employee_last_name')
+                                Infolists\Components\TextEntry::make('extractedData.employee_last_name')
                                     ->label('Cognome'),
-                                Infolists\Components\TextEntry::make('company_name')
+                                Infolists\Components\TextEntry::make('extractedData.company_name')
                                     ->label('Azienda'),
-                                Infolists\Components\TextEntry::make('document_date')
+                                Infolists\Components\TextEntry::make('extractedData.document_date')
                                     ->label('Data documento')
                                     ->date('d/m/Y'),
-                                Infolists\Components\TextEntry::make('document_type')
+                                Infolists\Components\TextEntry::make('extractedData.document_type')
                                     ->label('Tipo documento'),
-                                Infolists\Components\TextEntry::make('confidence_score')
+                                Infolists\Components\TextEntry::make('extractedData.confidence_score')
                                     ->label('Confidenza')
                                     ->suffix('%'),
-                                Infolists\Components\TextEntry::make('description')
+                                Infolists\Components\TextEntry::make('extractedData.description')
                                     ->label('Descrizione')
                                     ->columnSpanFull(),
                             ])
                             ->columns(2),
                         Infolists\Components\Section::make('Documento')
                             ->schema([
-                                Infolists\Components\TextEntry::make('subDocument.send_status')
+                                Infolists\Components\TextEntry::make('send_status')
                                     ->label('Stato invio')
-                                    ->state(fn () => $this->subDocument->send_status)
                                     ->badge()
                                     ->color(fn (SendStatus $state): string => $state->color()),
                                 Infolists\Components\TextEntry::make('pages')

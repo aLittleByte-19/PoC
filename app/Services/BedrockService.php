@@ -5,6 +5,7 @@ namespace App\Services;
 use Aws\BedrockRuntime\BedrockRuntimeClient;
 use Aws\Exception\AwsException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class BedrockService
 {
@@ -81,7 +82,11 @@ class BedrockService
 
         $this->ensureConfigured();
 
-        $pdfContent = base64_encode(file_get_contents(storage_path('app/'.$pdfPath)));
+        $pdfContent = Storage::disk('local')->get($pdfPath);
+
+        if ($pdfContent === null) {
+            throw new \RuntimeException("File non trovato sul disco: {$pdfPath}");
+        }
 
         $prompt = "Analizza questo PDF di cedolini aziendali. Identifica tutti i dipendenti presenti.\nPer ogni dipendente restituisci un array JSON con: employee_name (stringa), start_page (intero, 1-indexed), end_page (intero, 1-indexed).\nRispondi SOLO con JSON valido (array). Se non ci sono dipendenti distinti, restituisci un array vuoto.";
 
@@ -107,6 +112,13 @@ class BedrockService
             ]);
 
             $text = $result['output']['message']['content'][0]['text'] ?? '[]';
+
+            if (preg_match('/```(?:json)?\s*(\[.*?\])\s*```/s', $text, $matches)) {
+                $text = $matches[1];
+            } elseif (preg_match('/(\[.*\])/s', $text, $matches)) {
+                $text = $matches[1];
+            }
+
             $decoded = json_decode($text, true);
 
             if (! is_array($decoded)) {
@@ -137,13 +149,17 @@ class BedrockService
                 'document_date' => now()->toDateString(),
                 'document_type' => 'Cedolino',
                 'description' => 'Dati estratti in modalita PoC.',
-                'confidence_score' => (int) env('POC_CONFIDENCE_THRESHOLD', 80),
+                'confidence_score' => (int) config('services.bedrock.poc_confidence_threshold', 80),
             ];
         }
 
         $this->ensureConfigured();
 
-        $pdfContent = base64_encode(file_get_contents(storage_path('app/'.$subPdfPath)));
+        $pdfContent = Storage::disk('local')->get($subPdfPath);
+
+        if ($pdfContent === null) {
+            throw new \RuntimeException("File non trovato sul disco: {$subPdfPath}");
+        }
 
         $prompt = "Estrai i seguenti campi da questo cedolino PDF.\nRispondi SOLO con JSON valido con le chiavi: employee_first_name, employee_last_name, company_name, document_date (formato YYYY-MM-DD), document_type, description (max 200 caratteri), confidence_score (intero 0-100 che indica la tua confidenza nell'estrazione).\nUsa null per i campi non trovati.";
 
@@ -169,6 +185,13 @@ class BedrockService
             ]);
 
             $text = $result['output']['message']['content'][0]['text'] ?? '{}';
+
+            if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $text, $matches)) {
+                $text = $matches[1];
+            } elseif (preg_match('/(\{.*\})/s', $text, $matches)) {
+                $text = $matches[1];
+            }
+
             $decoded = json_decode($text, true);
 
             if (! is_array($decoded)) {

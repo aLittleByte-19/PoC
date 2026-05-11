@@ -28,6 +28,11 @@ class CommunicationFactory extends Factory
         return $this->state(['status' => CommunicationStatus::Draft]);
     }
 
+    public function approved(): static
+    {
+        return $this->state(['status' => CommunicationStatus::Approved]);
+    }
+
     public function discarded(): static
     {
         return $this->state(['status' => CommunicationStatus::Discarded]);

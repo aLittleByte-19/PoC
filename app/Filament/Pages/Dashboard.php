@@ -31,10 +31,14 @@ class Dashboard extends BaseDashboard
             ->where('status', CommunicationStatus::Draft)
             ->count();
 
+        $approved = Communication::query()
+            ->where('status', CommunicationStatus::Approved)
+            ->count();
+
         return [
             ['value' => $total, 'label' => 'Contenuti generati'],
             ['value' => $drafts, 'label' => 'Bozze da rivedere'],
-            ['value' => max(0, $total - $drafts), 'label' => 'Contenuti finalizzati'],
+            ['value' => $approved, 'label' => 'Contenuti finalizzati'],
         ];
     }
 

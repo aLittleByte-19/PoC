@@ -14,6 +14,15 @@ class ViewCommunication extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('approve')
+                ->label('Approva')
+                ->color('success')
+                ->icon('heroicon-o-check-circle')
+                ->visible(fn () => $this->record->status === CommunicationStatus::Draft)
+                ->action(function () {
+                    $this->record->update(['status' => CommunicationStatus::Approved]);
+                    $this->refreshFormData(['status']);
+                }),
             Actions\Action::make('discard')
                 ->label('Scarta')
                 ->color('danger')

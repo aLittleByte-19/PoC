@@ -41,6 +41,7 @@ return [
         'classifier_model_id' => env('BEDROCK_CLASSIFIER_MODEL_ID'),
         'guardrail_id' => env('BEDROCK_GUARDRAIL_ID'),
         'region' => env('BEDROCK_AWS_REGION', env('AWS_DEFAULT_REGION', 'eu-central-1')),
+        'poc_confidence_threshold' => (int) env('POC_CONFIDENCE_THRESHOLD', 80),
     ],
 
     'textract' => [

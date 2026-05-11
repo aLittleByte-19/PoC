@@ -14,8 +14,6 @@ use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 
 class OriginalDocumentResource extends Resource
 {
@@ -93,14 +91,7 @@ class OriginalDocumentResource extends Resource
                     ])
                     ->action(function (array $data) {
                         $service = app(DocumentProcessingService::class);
-                        $file = new UploadedFile(
-                            Storage::disk('local')->path($data['pdf_file']),
-                            basename($data['pdf_file']),
-                            'application/pdf',
-                            null,
-                            true,
-                        );
-                        $service->handleUpload($file);
+                        $service->handleStoredFile($data['pdf_file'], basename($data['pdf_file']));
                     }),
             ])
             ->filters([
