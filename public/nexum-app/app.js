@@ -7,7 +7,8 @@ const views = {
 const apiRoutes = {
   state: "/poc/api/state",
   communications: "/poc/api/communications",
-  documentOcr: "/poc/api/documents/ocr"
+  documentOcr: "/poc/api/documents/ocr",
+  documentDelete: (id) => `/poc/api/documents/${String(id).replace("sub-", "")}`
 };
 
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
@@ -326,6 +327,9 @@ function renderDocuments() {
       confidence === null ? "Confidenza n/d" : `Confidenza ${confidence}%`
     ].join(" · ");
 
+    const actions = document.createElement("div");
+    actions.className = "history-actions";
+
     const action = document.createElement("button");
     action.className = "text-button";
     action.type = "button";
@@ -334,8 +338,17 @@ function renderDocuments() {
       showDocumentDetail(documentItem.id);
     });
 
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "text-button text-button--danger";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Elimina";
+    deleteBtn.addEventListener("click", () => {
+      deleteDocument(documentItem.id);
+    });
+
+    actions.append(action, deleteBtn);
     main.append(title, meta);
-    row.append(main, action);
+    row.append(main, actions);
     documentHistory.append(row);
   });
 }
@@ -397,6 +410,60 @@ function showDocumentDetail(documentId) {
   goTo("copilot", "copilot-detail");
 }
 
+let activeStream = null;
+
+function closeStream() {
+  if (activeStream) {
+    activeStream.close();
+    activeStream = null;
+  }
+}
+
+function openDocumentStream(streamUrl) {
+  closeStream();
+
+  activeStream = new EventSource(streamUrl);
+
+  activeStream.addEventListener("document", (e) => {
+    const doc = JSON.parse(e.data);
+    documents = [...documents.filter((d) => d.id !== doc.id), doc];
+    renderDocuments();
+  });
+
+  activeStream.addEventListener("done", (e) => {
+    const data = JSON.parse(e.data);
+    applyCopilotState(data.state?.copilot || { documents: [] });
+    setText(uploadState, "Analisi completata");
+    setText(uploadOutput, "Tutti i sotto-documenti sono stati elaborati.");
+    closeStream();
+  });
+
+  activeStream.addEventListener("error", (e) => {
+    if (e.data) {
+      const data = JSON.parse(e.data);
+      setText(uploadState, "Analisi non riuscita");
+      setText(uploadOutput, data.message || "Errore durante l'elaborazione.");
+    }
+    closeStream();
+  });
+}
+
+async function deleteDocument(documentId) {
+  try {
+    const result = await apiRequest(apiRoutes.documentDelete(documentId), { method: "DELETE" });
+    const newState = result.state?.copilot || { documents: [] };
+
+    if (activeDocumentId === documentId) {
+      copilotDetailSection?.classList.add("is-hidden");
+      activeDocumentId = null;
+    }
+
+    applyCopilotState(newState);
+  } catch {
+    // silent — list stays as-is
+  }
+}
+
 function applyCopilotState(state, focusDetail = false) {
   documents = state?.documents || [];
   activeDocumentId = documents[0]?.id || null;
@@ -436,11 +503,12 @@ documentFileInput?.addEventListener("change", async () => {
       body: formData
     });
 
-    applyCopilotState(result.state?.copilot || { documents: result.documents || [] }, true);
-    setText(uploadState, "Analisi completata");
-    setText(uploadOutput, result.message || "Documento analizzato.");
+    setText(uploadState, "Elaborazione in corso");
+    setText(uploadOutput, "I sotto-documenti appariranno man mano che vengono analizzati.");
+    goTo("copilot", "copilot-results");
+    openDocumentStream(result.streamUrl);
   } catch (error) {
-    setText(uploadState, "Analisi non riuscita");
+    setText(uploadState, "Caricamento non riuscito");
     setText(uploadOutput, humanApiError(error));
   } finally {
     uploadBox?.classList.remove("processing");

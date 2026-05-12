@@ -20,6 +20,10 @@ class AppServiceProvider extends ServiceProvider
             $config = [
                 'version' => 'latest',
                 'region' => config('services.bedrock.region'),
+                'http' => [
+                    'timeout' => 300,
+                    'connect_timeout' => 15,
+                ],
             ];
 
             if (filled($credentials['key'] ?? null) && filled($credentials['secret'] ?? null)) {
