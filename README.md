@@ -1,73 +1,121 @@
 # NEXUM / aLittleByte PoC
 
-Proof of Concept universitaria per i moduli:
+Proof of Concept universitaria per sperimentare due funzioni centrali della piattaforma NEXUM/aLittleByte:
 
-- AI Assistant Generativo;
-- AI Co-Pilot documentale per Consulenti del Lavoro.
+- generazione assistita di contenuti tramite AI Assistant;
+- caricamento e analisi iniziale di documenti PDF per il Co-Pilot CdL.
 
-La base applicativa e' Laravel con interfaccia amministrativa Filament. Il progetto resta volutamente leggero: dimostra i flussi principali dell'Analisi dei Requisiti, mentre la rifinitura architetturale e funzionale viene rimandata al PB.
+L'applicazione e' pensata per una demo locale semplice: una singola interfaccia web pubblica, senza login, raggiungibile dalla root del progetto avviato in Docker.
 
 ## Stack locale
 
-- Laravel 12
-- Filament 3
-- PostgreSQL
-- Redis e Laravel Queue
-- MinIO come storage S3-compatible locale
-- Mailpit per test email
-- AI worker FastAPI per OCR/parsing/split placeholder
-- Bedrock e Textract configurabili, disabilitati di default
+- Laravel 12 come backend applicativo.
+- PostgreSQL come database.
+- Redis e Laravel Queue per lavorazioni asincrone.
+- Nginx e PHP-FPM per servire l'applicativo.
+- MinIO come storage S3-compatible locale.
+- Mailpit per eventuali test email locali.
+- AI worker FastAPI opzionale per OCR/parsing/split documentale.
+- Amazon Bedrock e Textract configurabili tramite variabili d'ambiente.
 
-## Perimetro PoC
+## Funzioni disponibili
 
-Il perimetro funzionale e le esclusioni sono descritti in [docs/poc-scope.md](docs/poc-scope.md).
+### AI Assistant
 
-## Avvio ambiente
+La sezione `AI Assistant > Generazione` permette di:
 
-Prima copia l'esempio di configurazione:
+- inserire un prompt testuale;
+- selezionare tono e stile;
+- generare una bozza composta da titolo e testo;
+- visualizzare e revisionare localmente il risultato.
+
+Di default la generazione usa un driver fake deterministico, utile per provare il flusso senza credenziali AWS. Se Bedrock viene configurato, la stessa interfaccia puo' inviare la richiesta al servizio reale.
+
+### Co-Pilot CdL
+
+La sezione `Co-Pilot CdL > Caricamento` permette di:
+
+- caricare un PDF;
+- salvare il documento nel sistema;
+- avviare una prima elaborazione di split;
+- rilevare i campi principali del documento;
+- consultare lo storico dei documenti rilevati;
+- aprire il dettaglio con campi OCR, anteprima dello split e preview PDF.
+
+La PoC non implementa ancora una pipeline documentale completa: split robusto, OCR avanzato, matching destinatario e revisione human-in-the-loop sono predisposti come punti di evoluzione.
+
+## Avvio rapido
+
+Copia la configurazione di esempio:
 
 ```bash
 cp .env.example .env
 ```
 
-Poi avvia i servizi e il bootstrap applicativo:
+Avvia lo stack locale:
 
 ```bash
 docker compose up -d --build
 ```
 
-Durante l'avvio il container `app` crea `.env` da `.env.example` se manca, installa automaticamente le dipendenze Composer se `vendor/` manca o se cambia `composer.lock`, genera `APP_KEY`, esegue le migrazioni e crea l'utente Filament locale se non esiste.
+Al primo avvio il container `app`:
 
-Credenziali Filament locali di default:
+- installa le dipendenze Composer se necessario;
+- genera `APP_KEY` se manca;
+- esegue le migrazioni;
+- prepara l'applicazione per l'uso locale.
+
+Quando i container sono attivi, apri:
 
 ```text
-Email: admin@nexum.local
-Password: Password123!
+http://localhost:8080/
 ```
 
-Se vuoi disabilitare o personalizzare il bootstrap automatico:
+Servizi di supporto:
 
-```env
-COMPOSER_INSTALL_ON_STARTUP=false
-LARAVEL_AUTOMATED_SETUP=false
-FILAMENT_ADMIN_CREATE=false
-FILAMENT_ADMIN_EMAIL=admin@nexum.local
-FILAMENT_ADMIN_PASSWORD=Password123!
-```
-
-Servizi locali principali:
-
-- Laravel/Nginx: `http://localhost:8080`
-- Filament: `http://localhost:8080/admin`
 - MinIO console: `http://localhost:9001`
 - Mailpit: `http://localhost:8025`
-- AI worker: `http://localhost:8001/health`
+- AI worker healthcheck: `http://localhost:8001/health`
 
-## Modalita AI
+## Comandi utili
 
-Per default `BEDROCK_ENABLED=false`, quindi l'applicazione usa risposte fake deterministiche utili alla demo locale.
+Eseguire le migrazioni manualmente:
 
-Per provare Bedrock reale:
+```bash
+docker compose exec app php artisan migrate
+```
+
+Lanciare i test:
+
+```bash
+docker compose exec app php artisan test
+```
+
+Pulire cache Laravel:
+
+```bash
+docker compose exec app php artisan optimize:clear
+```
+
+Rigenerare autoload Composer:
+
+```bash
+docker compose exec app composer dump-autoload
+```
+
+## Configurazione AI
+
+La configurazione locale usa valori sicuri per la demo:
+
+```env
+AI_GENERATOR_DRIVER=fake
+DOCUMENT_OCR_DRIVER=local
+DOCUMENT_CLASSIFIER_DRIVER=fake
+BEDROCK_ENABLED=false
+TEXTRACT_ENABLED=false
+```
+
+Per provare Amazon Bedrock reale, abilita il servizio e imposta modello e credenziali tramite `.env` locale o variabili d'ambiente non versionate:
 
 ```env
 BEDROCK_ENABLED=true
@@ -77,8 +125,37 @@ AWS_ACCESS_KEY_ID=<access-key>
 AWS_SECRET_ACCESS_KEY=<secret-key>
 ```
 
-Le credenziali reali non devono essere versionate.
+Per Textract valgono le stesse cautele: le credenziali AWS e gli ARN reali non devono essere versionati.
 
-## Placeholder intenzionali
+## Storage locale
 
-OCR reale, Textract, split documentale robusto, matching destinatario, metriche avanzate e consegna email reale sono predisposti ma non implementati in modo completo. Nella PoC vengono simulati o lasciati come punti di integrazione.
+Per default lo storage usa MinIO con API S3-compatible:
+
+```env
+FILESYSTEM_DISK=s3
+AWS_ENDPOINT=http://minio:9000
+AWS_BUCKET=nexum-local
+AWS_USE_PATH_STYLE_ENDPOINT=true
+```
+
+Il servizio `minio-init` crea automaticamente il bucket locale configurato da `MINIO_BUCKET`.
+
+## Note operative
+
+- L'applicazione corrente funziona senza autenticazione.
+- L'interfaccia principale e' servita solo da `/`.
+- Le API della PoC sono sotto `/poc/api/*`.
+- I task asincroni usano Redis tramite il servizio `queue`.
+- Se il browser mostra asset vecchi, ricarica forzatamente la pagina: CSS e JS sono comunque versionati automaticamente in base alla modifica dei file.
+
+## Limiti intenzionali
+
+Questa PoC dimostra i flussi principali, non una soluzione enterprise completa. Sono volutamente lasciati come evoluzioni successive:
+
+- autenticazione e gestione ruoli;
+- workflow completo di approvazione;
+- invio email reale;
+- OCR/Textract completo;
+- split documentale avanzato;
+- matching destinatario;
+- metriche avanzate e audit trail esteso.

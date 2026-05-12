@@ -3,18 +3,17 @@
 namespace App\Http\Controllers\Poc;
 
 use App\Enums\CommunicationStatus;
-use App\Enums\ProcessingStatus;
-use App\Filament\Resources\UserResource;
 use App\Http\Controllers\Controller;
 use App\Models\Communication;
 use App\Models\ExtractedData;
 use App\Models\OriginalDocument;
 use App\Models\SubDocument;
 use App\Services\BedrockService;
+use App\Services\DocumentProcessingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AppApiController extends Controller
@@ -33,37 +32,6 @@ class AppApiController extends Controller
         'Aggiornamento breve',
     ];
 
-    private const CHANNELS = [
-        'Email interna',
-        'News portale',
-        'Notifica rapida',
-    ];
-
-    private const AUDIENCES = [
-        'Tutti i dipendenti',
-        'Manager e responsabili',
-        'Team HR',
-    ];
-
-    public function session(Request $request): JsonResponse
-    {
-        $user = $request->user();
-
-        return response()->json([
-            'csrfToken' => csrf_token(),
-            'user' => [
-                'name' => $user->name,
-                'email' => $user->email,
-                'initials' => $this->initials($user->name),
-                'isAdmin' => $user->is_admin,
-            ],
-            'links' => [
-                'users' => $user->is_admin ? UserResource::getUrl('index') : null,
-                'logout' => route('poc.logout'),
-            ],
-        ]);
-    }
-
     public function state(): JsonResponse
     {
         return response()->json($this->stateData());
@@ -73,21 +41,16 @@ class AppApiController extends Controller
     {
         $validated = $request->validate([
             'prompt' => ['required', 'string', 'min:12', 'max:5000'],
-            'audience' => ['required', 'string', Rule::in(self::AUDIENCES)],
             'tone' => ['required', 'string', Rule::in(self::TONES)],
             'style' => ['required', 'string', Rule::in(self::STYLES)],
-            'channel' => ['required', 'string', Rule::in(self::CHANNELS)],
-        ]);
-
-        $style = $validated['style'].' / '.$validated['channel'];
-        $prompt = implode("\n", [
-            'Pubblico: '.$validated['audience'],
-            'Canale: '.$validated['channel'],
-            'Richiesta: '.$validated['prompt'],
         ]);
 
         try {
-            $generated = $bedrock->generateCommunication($prompt, $validated['tone'], $style);
+            $generated = $bedrock->generateCommunication(
+                $validated['prompt'],
+                $validated['tone'],
+                $validated['style'],
+            );
         } catch (\Throwable $e) {
             Log::warning('PoC communication generation failed', ['message' => $e->getMessage()]);
 
@@ -99,7 +62,7 @@ class AppApiController extends Controller
         $communication = Communication::create([
             'prompt' => $validated['prompt'],
             'tone' => $validated['tone'],
-            'style' => $style,
+            'style' => $validated['style'],
             'generated_title' => $generated['title'],
             'generated_body' => $generated['body'],
             'status' => CommunicationStatus::Draft,
@@ -112,68 +75,50 @@ class AppApiController extends Controller
         ], 201);
     }
 
-    public function runDocumentOcr(Request $request): JsonResponse
+    public function runDocumentOcr(Request $request, DocumentProcessingService $documents): JsonResponse
     {
         $validated = $request->validate([
             'document' => ['required', 'file', 'mimetypes:application/pdf', 'max:10240'],
         ]);
 
-        $file = $validated['document'];
-        $path = $file->store('documents/originals', 'local');
-
-        $original = OriginalDocument::create([
-            'file_path' => $path,
-            'original_filename' => $file->getClientOriginalName(),
-            'processing_status' => ProcessingStatus::Processing,
-        ]);
-
-        $workerMessage = 'OCR locale/Textract predisposto; campi non ancora disponibili.';
-
         try {
-            $response = Http::timeout(8)
-                ->acceptJson()
-                ->post(rtrim((string) config('services.ai_worker.url'), '/').'/ocr', [
-                    'document_id' => (string) $original->id,
-                    'storage_path' => $path,
-                    'driver' => config('services.textract.enabled') ? 'textract' : 'local',
-                    'language' => 'ita+eng',
-                ]);
-
-            if ($response->successful()) {
-                $workerMessage = $response->json('message') ?: $workerMessage;
-            }
+            $original = $documents->handleUpload($validated['document']);
         } catch (\Throwable $e) {
-            Log::info('PoC OCR worker unavailable; keeping null extracted fields', [
-                'original_document_id' => $original->id,
+            Log::warning('PoC document processing failed', [
                 'message' => $e->getMessage(),
             ]);
+
+            return response()->json([
+                'message' => 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.',
+            ], 502);
         }
 
-        $subDocument = SubDocument::create([
-            'original_document_id' => $original->id,
-            'file_path' => $path,
-            'start_page' => 1,
-            'end_page' => 1,
-        ]);
-
-        ExtractedData::create([
-            'sub_document_id' => $subDocument->id,
-            'employee_first_name' => null,
-            'employee_last_name' => null,
-            'company_name' => null,
-            'document_date' => null,
-            'document_type' => null,
-            'description' => null,
-            'confidence_score' => null,
-        ]);
-
-        $original->update(['processing_status' => ProcessingStatus::Completed]);
+        $subDocuments = $original->subDocuments()
+            ->with(['originalDocument', 'extractedData'])
+            ->latest()
+            ->get()
+            ->map(fn (SubDocument $document): array => $this->serializeDocument($document))
+            ->values()
+            ->all();
 
         return response()->json([
-            'message' => $workerMessage,
-            'document' => $this->serializeDocument($subDocument->fresh(['originalDocument', 'extractedData'])),
+            'message' => 'Documento analizzato: split iniziale e campi OCR disponibili nella sezione risultati.',
+            'document' => $subDocuments[0] ?? null,
+            'documents' => $subDocuments,
             'state' => $this->stateData(),
         ], 201);
+    }
+
+    public function previewSubDocument(SubDocument $subDocument)
+    {
+        abort_unless(Storage::disk('local')->exists($subDocument->file_path), 404);
+
+        $filename = $subDocument->originalDocument?->original_filename ?: 'documento.pdf';
+
+        return response()->file(Storage::disk('local')->path($subDocument->file_path), [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.str_replace('"', '', $filename).'"',
+        ]);
     }
 
     private function stateData(): array
@@ -186,7 +131,9 @@ class AppApiController extends Controller
             ->get();
 
         $documentCount = OriginalDocument::query()->count();
-        $sentCount = SubDocument::query()->where('send_status', 'sent')->count();
+        $withConfidenceCount = ExtractedData::query()
+            ->whereNotNull('confidence_score')
+            ->count();
         $reviewCount = ExtractedData::query()
             ->where(function ($query) {
                 $query->whereNull('confidence_score')
@@ -198,9 +145,7 @@ class AppApiController extends Controller
             'assistant' => [
                 'metrics' => [
                     ['value' => Communication::query()->count(), 'label' => 'Contenuti generati'],
-                    ['value' => Communication::query()->where('status', CommunicationStatus::Draft)->count(), 'label' => 'Bozze da rivedere'],
-                    ['value' => 0, 'label' => 'Feedback raccolti'],
-                    ['value' => 'n/d', 'label' => 'Rating medio'],
+                    ['value' => Communication::query()->where('status', CommunicationStatus::Draft)->count(), 'label' => 'Bozze generate'],
                 ],
                 'history' => $communications
                     ->map(fn (Communication $communication): array => $this->serializeCommunication($communication))
@@ -210,10 +155,9 @@ class AppApiController extends Controller
             'copilot' => [
                 'metrics' => [
                     ['value' => $documentCount, 'label' => 'Documenti analizzati'],
+                    ['value' => $documents->count(), 'label' => 'Sotto-documenti rilevati'],
+                    ['value' => $withConfidenceCount, 'label' => 'Campi con confidenza'],
                     ['value' => $reviewCount, 'label' => 'Da verificare'],
-                    ['value' => max(0, $documents->count() - $reviewCount - $sentCount), 'label' => 'Pronti per invio'],
-                    ['value' => $sentCount, 'label' => 'Inviati'],
-                    ['value' => 'n/d', 'label' => 'Tempo medio analisi'],
                 ],
                 'documents' => $documents
                     ->map(fn (SubDocument $document): array => $this->serializeDocument($document))
@@ -259,23 +203,12 @@ class AppApiController extends Controller
             'type' => $data?->document_type,
             'description' => $data?->description,
             'confidence' => $confidence,
-            'deliveryStatus' => $subDocument->send_status->label(),
+            'previewUrl' => route('poc.documents.preview', ['subDocument' => $subDocument->id]),
             'previewLines' => [
-                'Anteprima PDF non disponibile nella PoC.',
-                'OCR locale/Textract predisposto.',
-                'Campi mostrati come non disponibili finché non vengono estratti.',
+                'Split iniziale: pagine '.$subDocument->start_page.'-'.$subDocument->end_page.'.',
+                'File originale: '.($original?->original_filename ?: 'Non disponibile').'.',
+                'Campi OCR rilevati dal servizio AI configurato o dal fallback PoC.',
             ],
         ];
-    }
-
-    private function initials(string $name): string
-    {
-        $parts = array_values(array_filter(preg_split('/\s+/', trim($name)) ?: []));
-
-        if ($parts === []) {
-            return 'U';
-        }
-
-        return strtoupper(substr($parts[0], 0, 1).substr($parts[1] ?? '', 0, 1));
     }
 }

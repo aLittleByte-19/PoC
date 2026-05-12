@@ -24,32 +24,6 @@ run_with_retries() {
     done
 }
 
-filament_admin_exists() {
-    FILAMENT_ADMIN_EMAIL="$1" php <<'PHP'
-<?php
-
-require 'vendor/autoload.php';
-
-$app = require 'bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-
-exit(App\Models\User::where('email', getenv('FILAMENT_ADMIN_EMAIL'))->exists() ? 0 : 1);
-PHP
-}
-
-mark_filament_admin() {
-    FILAMENT_ADMIN_EMAIL="$1" php <<'PHP'
-<?php
-
-require 'vendor/autoload.php';
-
-$app = require 'bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-
-App\Models\User::where('email', getenv('FILAMENT_ADMIN_EMAIL'))->update(['is_admin' => true]);
-PHP
-}
-
 if [ "${COMPOSER_INSTALL_ON_STARTUP:-true}" = "true" ] && [ -f composer.json ]; then
     if [ -f composer.lock ]; then
         composer_hash="$(sha256sum composer.lock | awk '{ print $1 }')"
@@ -117,25 +91,6 @@ if [ "${LARAVEL_AUTOMATED_SETUP:-false}" = "true" ]; then
     fi
 
     run_with_retries "Database migration" php artisan migrate --force --no-interaction
-
-    if [ "${FILAMENT_ADMIN_CREATE:-true}" = "true" ]; then
-        admin_name="${FILAMENT_ADMIN_NAME:-NEXUM Admin}"
-        admin_email="${FILAMENT_ADMIN_EMAIL:-admin@nexum.local}"
-        admin_password="${FILAMENT_ADMIN_PASSWORD:-Password123!}"
-
-        if filament_admin_exists "$admin_email"; then
-            echo "Filament admin user already exists: $admin_email"
-        else
-            echo "Creating Filament admin user: $admin_email"
-            php artisan make:filament-user \
-                --name="$admin_name" \
-                --email="$admin_email" \
-                --password="$admin_password" \
-                --no-interaction
-        fi
-
-        mark_filament_admin "$admin_email"
-    fi
 
     touch "$setup_marker"
 fi

@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\SendStatus;
 use App\Models\ExtractedData;
 use App\Models\SubDocument;
 use App\Services\BedrockService;
@@ -83,19 +82,6 @@ test('extractFields throws RuntimeException on bedrock failure', function () {
         $service = app(BedrockService::class);
         $service->extractFields($subDocument->file_path);
     })->toThrow(RuntimeException::class);
-});
-
-test('sub document default send status is pending', function () {
-    $subDocument = SubDocument::factory()->create();
-
-    expect($subDocument->send_status)->toBe(SendStatus::Pending);
-});
-
-test('sub document send status can be updated to sent', function () {
-    $subDocument = SubDocument::factory()->create();
-    $subDocument->update(['send_status' => SendStatus::Sent]);
-
-    expect($subDocument->fresh()->send_status)->toBe(SendStatus::Sent);
 });
 
 test('extracted data is linked to its sub document', function () {

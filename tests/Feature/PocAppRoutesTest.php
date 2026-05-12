@@ -1,111 +1,74 @@
 <?php
 
-use App\Filament\Resources\UserResource\Pages\CreateUser;
 use App\Models\Communication;
 use App\Models\ExtractedData;
 use App\Models\OriginalDocument;
-use App\Models\User;
+use App\Models\SubDocument;
 use App\Services\BedrockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
-use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-test('root redirects guests to the user login', function () {
+function pocPdfUpload(string $filename = 'cedolino.pdf'): UploadedFile
+{
+    $pdf = new FPDF;
+    $pdf->AddPage();
+    $pdf->SetFont('Arial', '', 12);
+    $pdf->Cell(0, 10, 'Cedolino dimostrativo PoC');
+
+    return UploadedFile::fake()->createWithContent($filename, $pdf->Output('S'));
+}
+
+test('root renders the poc application without authentication', function () {
     $this->get('/')
-        ->assertRedirect('/login');
-});
-
-test('root redirects authenticated users to the application', function () {
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->get('/')
-        ->assertRedirect(route('poc.app'));
-});
-
-test('user login authenticates standard users into the application', function () {
-    $user = User::factory()->create();
-
-    $this->post('/login', [
-        'email' => $user->email,
-        'password' => 'password',
-    ])
-        ->assertRedirect(route('poc.app'));
-
-    $this->assertAuthenticatedAs($user);
-});
-
-test('admin users page is available only to admin users', function () {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->get('/admin/users')
         ->assertOk()
-        ->assertSee('Credenziali utenti');
+        ->assertSee('Overview')
+        ->assertSee('AI Assistant')
+        ->assertSee('Co-Pilot CdL')
+        ->assertDontSee('Gestione credenziali');
 });
 
-test('admin panel keeps its dedicated login route for guests', function () {
-    $this->get('/admin/users')
-        ->assertRedirect('/admin/login');
+test('legacy app and login paths do not require authentication', function () {
+    $this->get('/app')
+        ->assertRedirect('/');
+
+    $this->get('/login')
+        ->assertRedirect('/');
 });
 
-test('standard users cannot access the admin users page', function () {
-    $user = User::factory()->create();
+test('admin routes are not registered for the public poc', function () {
+    $this->get('/admin')
+        ->assertNotFound();
 
-    $this->actingAs($user)
-        ->get('/admin/users')
-        ->assertForbidden();
+    $this->get('/admin/login')
+        ->assertNotFound();
 });
 
-test('poc api session requires authentication', function () {
-    $this->getJson('/poc/api/session')->assertUnauthorized();
-});
-
-test('authenticated admin session returns profile csrf token and user management link', function () {
-    $user = User::factory()->admin()->create(['name' => 'Nexum Admin']);
-
-    $this->actingAs($user)
-        ->getJson('/poc/api/session')
+test('poc api state is public for the local poc', function () {
+    $this->getJson('/poc/api/state')
         ->assertOk()
-        ->assertJsonPath('user.email', $user->email)
-        ->assertJsonPath('user.initials', 'NA')
-        ->assertJsonPath('user.isAdmin', true)
-        ->assertJsonStructure(['csrfToken', 'links' => ['users', 'logout']]);
+        ->assertJsonStructure(['assistant', 'copilot']);
 });
 
-test('authenticated standard session does not expose the user management link', function () {
-    $user = User::factory()->create(['name' => 'Nexum User']);
-
-    $this->actingAs($user)
-        ->getJson('/poc/api/session')
-        ->assertOk()
-        ->assertJsonPath('user.email', $user->email)
-        ->assertJsonPath('user.isAdmin', false)
-        ->assertJsonPath('links.users', null);
-});
-
-test('ai assistant generation uses validated parameters and stores a draft', function () {
+test('ai assistant generation uses only prompt tone and style', function () {
     $this->mock(BedrockService::class, function ($mock) {
         $mock->shouldReceive('generateCommunication')
             ->once()
+            ->with(
+                'Comunicazione interna sulla nuova area documentale.',
+                'Chiaro e diretto',
+                'Testo informativo',
+            )
             ->andReturn(['title' => 'Titolo reale', 'body' => 'Corpo reale']);
     });
 
-    $user = User::factory()->create();
-
-    $this->actingAs($user)
-        ->postJson('/poc/api/communications', [
-            'prompt' => 'Comunicazione interna sulla nuova area documentale.',
-            'audience' => 'Tutti i dipendenti',
-            'tone' => 'Chiaro e diretto',
-            'style' => 'Testo informativo',
-            'channel' => 'Email interna',
-        ])
+    $this->postJson('/poc/api/communications', [
+        'prompt' => 'Comunicazione interna sulla nuova area documentale.',
+        'tone' => 'Chiaro e diretto',
+        'style' => 'Testo informativo',
+    ])
         ->assertCreated()
         ->assertJsonPath('communication.title', 'Titolo reale');
 
@@ -113,47 +76,40 @@ test('ai assistant generation uses validated parameters and stores a draft', fun
     expect(Communication::query()->first()->generated_body)->toBe('Corpo reale');
 });
 
-test('document ocr upload stores null extracted fields until ocr is implemented', function () {
+test('document upload performs initial split and field extraction', function () {
     Storage::fake('local');
-    Http::fake([
-        '*' => Http::response([
-            'document_id' => '1',
-            'status' => 'placeholder',
-            'message' => 'OCR predisposto.',
-            'data' => [],
-        ]),
-    ]);
 
-    $user = User::factory()->create();
-    $file = UploadedFile::fake()->create('cedolino.pdf', 16, 'application/pdf');
+    $this->mock(BedrockService::class, function ($mock) {
+        $mock->shouldReceive('splitDocument')
+            ->once()
+            ->andReturn([
+                ['employee_name' => 'Mario Rossi', 'start_page' => 1, 'end_page' => 1],
+            ]);
 
-    $this->actingAs($user)
-        ->postJson('/poc/api/documents/ocr', ['document' => $file])
+        $mock->shouldReceive('extractFields')
+            ->once()
+            ->andReturn([
+                'employee_first_name' => 'Mario',
+                'employee_last_name' => 'Rossi',
+                'company_name' => 'Azienda Demo Srl',
+                'document_date' => now()->toDateString(),
+                'document_type' => 'Cedolino',
+                'description' => 'Cedolino dimostrativo.',
+                'confidence_score' => 86,
+            ]);
+    });
+
+    $response = $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
         ->assertCreated()
-        ->assertJsonPath('document.employee', null)
-        ->assertJsonPath('document.confidence', null);
+        ->assertJsonPath('documents.0.employee', 'Mario Rossi')
+        ->assertJsonPath('documents.0.confidence', 86)
+        ->assertJsonStructure(['documents' => [['previewUrl']]]);
 
     expect(OriginalDocument::query()->count())->toBe(1);
-    expect(ExtractedData::query()->first()->employee_first_name)->toBeNull();
-    expect(ExtractedData::query()->first()->confidence_score)->toBeNull();
-});
+    expect(SubDocument::query()->count())->toBe(1);
+    expect(ExtractedData::query()->first()->employee_first_name)->toBe('Mario');
 
-test('filament user creation hashes password', function () {
-    $admin = User::factory()->admin()->create();
-
-    Livewire::actingAs($admin)
-        ->test(CreateUser::class)
-        ->fillForm([
-            'name' => 'Operatore CdL',
-            'email' => 'operatore@nexum.local',
-            'password' => 'Password12345',
-            'password_confirmation' => 'Password12345',
-        ])
-        ->call('create')
-        ->assertHasNoFormErrors();
-
-    $created = User::query()->where('email', 'operatore@nexum.local')->first();
-
-    expect($created)->not->toBeNull();
-    expect(Hash::check('Password12345', $created->password))->toBeTrue();
+    $this->get($response->json('documents.0.previewUrl'))
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
 });

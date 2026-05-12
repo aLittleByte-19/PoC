@@ -49,7 +49,10 @@ class DocumentProcessingService
         $original->update(['processing_status' => ProcessingStatus::Processing]);
 
         try {
-            $segments = $this->bedrock->splitDocument($original->file_path);
+            $segments = $this->normalizeSegments(
+                $this->bedrock->splitDocument($original->file_path),
+                $original->file_path,
+            );
 
             foreach ($segments as $segment) {
                 $subPath = $this->extractPages(
@@ -78,6 +81,8 @@ class DocumentProcessingService
                         'sub_document_id' => $subDocument->id,
                         'message' => $e->getMessage(),
                     ]);
+
+                    $this->createEmptyExtractedData($subDocument);
                 }
             }
 
@@ -90,6 +95,51 @@ class DocumentProcessingService
             $original->update(['processing_status' => ProcessingStatus::Failed]);
             throw $e;
         }
+    }
+
+    /**
+     * Keep the PoC useful even when the split model cannot identify multiple recipients:
+     * one fallback segment still allows field extraction on the uploaded PDF.
+     *
+     * @param  array<int, array{employee_name?: string, start_page?: int, end_page?: int}>  $segments
+     * @return array<int, array{employee_name: string, start_page: int, end_page: int}>
+     */
+    private function normalizeSegments(array $segments, string $sourcePath): array
+    {
+        $pageCount = $this->pageCount($sourcePath);
+
+        if ($segments === []) {
+            return [[
+                'employee_name' => 'documento',
+                'start_page' => 1,
+                'end_page' => $pageCount,
+            ]];
+        }
+
+        return array_values(array_map(function (array $segment) use ($pageCount): array {
+            $startPage = max(1, (int) ($segment['start_page'] ?? 1));
+            $endPage = min($pageCount, max($startPage, (int) ($segment['end_page'] ?? $startPage)));
+
+            return [
+                'employee_name' => trim((string) ($segment['employee_name'] ?? 'documento')) ?: 'documento',
+                'start_page' => $startPage,
+                'end_page' => $endPage,
+            ];
+        }, $segments));
+    }
+
+    private function createEmptyExtractedData(SubDocument $subDocument): void
+    {
+        ExtractedData::create([
+            'sub_document_id' => $subDocument->id,
+            'employee_first_name' => null,
+            'employee_last_name' => null,
+            'company_name' => null,
+            'document_date' => null,
+            'document_type' => null,
+            'description' => null,
+            'confidence_score' => null,
+        ]);
     }
 
     /**
@@ -119,5 +169,12 @@ class DocumentProcessingService
         $pdf->Output($absoluteDest, 'F');
 
         return $relativePath;
+    }
+
+    private function pageCount(string $sourcePath): int
+    {
+        $pdf = new Fpdi;
+
+        return max(1, $pdf->setSourceFile(Storage::disk('local')->path($sourcePath)));
     }
 }
