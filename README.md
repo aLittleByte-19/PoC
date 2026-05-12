@@ -119,14 +119,16 @@ Per provare Amazon Bedrock reale con credenziali IAM temporanee, abilita il serv
 
 ```env
 BEDROCK_ENABLED=true
-BEDROCK_MODEL_ID=eu.anthropic.claude-sonnet-4-20250514-v1:0
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+DOCUMENT_OCR_DRIVER=local
+TEXTRACT_ENABLED=false
 AWS_DEFAULT_REGION=eu-north-1
 AWS_ACCESS_KEY_ID=<access-key>
 AWS_SECRET_ACCESS_KEY=<secret-key>
 AWS_SESSION_TOKEN=<session-token-se-temporaneo>
 ```
 
-Per i modelli che supportano solo `INFERENCE_PROFILE`, `BEDROCK_MODEL_ID` deve contenere l'ID del profilo di inferenza, non il foundation model id. Le credenziali generate dal portale AWS IAM Identity Center sono temporanee: quando scadono vanno sostituite nel file `.env` locale o riesportate nell'ambiente. Per Textract valgono le stesse cautele: le credenziali AWS e gli ARN reali non devono essere versionati.
+Per la PoC documentale usiamo Bedrock per split iniziale ed estrazione campi, lasciando Textract spento per evitare la dipendenza da bucket S3/SNS/IAM. I modelli Anthropic possono richiedere un inference profile e accesso Marketplace; `amazon.nova-lite-v1:0` e' il default consigliato per prove rapide con le credenziali IAM temporanee. Le credenziali generate dal portale AWS IAM Identity Center sono temporanee: quando scadono vanno sostituite nel file `.env` locale o riesportate nell'ambiente.
 
 ## Storage locale
 

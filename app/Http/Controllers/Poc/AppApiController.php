@@ -55,7 +55,7 @@ class AppApiController extends Controller
             Log::warning('PoC communication generation failed', ['message' => $e->getMessage()]);
 
             return response()->json([
-                'message' => 'Generazione non disponibile. Verifica la configurazione AI e riprova.',
+                'message' => $this->aiFailureMessage($e, 'Generazione non disponibile. Verifica la configurazione AI e riprova.'),
             ], 502);
         }
 
@@ -89,7 +89,7 @@ class AppApiController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.',
+                'message' => $this->aiFailureMessage($e, 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.'),
             ], 502);
         }
 
@@ -210,5 +210,24 @@ class AppApiController extends Controller
                 'Campi OCR rilevati dal servizio AI configurato o dal fallback PoC.',
             ],
         ];
+    }
+
+    private function aiFailureMessage(\Throwable $exception, string $fallback): string
+    {
+        $message = strtolower($exception->getMessage());
+
+        if (str_contains($message, 'expiredtoken')) {
+            return 'Le credenziali AWS temporanee sono scadute. Aggiorna AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN, poi ricarica la configurazione.';
+        }
+
+        if (str_contains($message, 'model access is denied')) {
+            return 'Il modello Bedrock configurato non è accessibile con queste credenziali. Usa un modello abilitato, ad esempio amazon.nova-lite-v1:0.';
+        }
+
+        if (str_contains($message, 'on-demand throughput') || str_contains($message, 'inference profile')) {
+            return 'Il modello Bedrock richiede un inference profile. Aggiorna BEDROCK_MODEL_ID con un profilo valido oppure usa amazon.nova-lite-v1:0.';
+        }
+
+        return $fallback;
     }
 }
