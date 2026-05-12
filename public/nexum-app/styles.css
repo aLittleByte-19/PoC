@@ -692,6 +692,15 @@ img {
   box-shadow: none;
 }
 
+.text-button--danger {
+  color: #d95e4f;
+}
+
+.text-button--danger:hover,
+.text-button--danger:focus-visible {
+  background: rgba(217, 94, 79, 0.08);
+}
+
 .favorite-button {
   width: 38px;
   min-height: 38px;

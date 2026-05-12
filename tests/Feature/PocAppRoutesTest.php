@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
+
 uses(RefreshDatabase::class);
 
 function pocPdfUpload(string $filename = 'cedolino.pdf'): UploadedFile
@@ -105,17 +106,23 @@ test('document upload performs initial split and field extraction', function () 
             ]);
     });
 
-    $response = $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
-        ->assertCreated()
-        ->assertJsonPath('documents.0.employee', 'Mario Rossi')
-        ->assertJsonPath('documents.0.confidence', 86)
-        ->assertJsonStructure(['documents' => [['previewUrl']]]);
+    $uploadResponse = $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
+        ->assertStatus(202)
+        ->assertJsonStructure(['streamUrl']);
 
     expect(OriginalDocument::query()->count())->toBe(1);
+
+    // Process via stream endpoint — must flush the callback manually in tests
+    $streamResponse = $this->get($uploadResponse->json('streamUrl'))->assertOk();
+    ob_start();
+    $streamResponse->baseResponse->sendContent();
+    ob_end_clean();
+
     expect(SubDocument::query()->count())->toBe(1);
     expect(ExtractedData::query()->first()->employee_first_name)->toBe('Mario');
 
-    $this->get($response->json('documents.0.previewUrl'))
+    $subDocument = SubDocument::query()->first();
+    $this->get(route('poc.documents.preview', $subDocument))
         ->assertOk()
         ->assertHeader('content-type', 'application/pdf');
 });

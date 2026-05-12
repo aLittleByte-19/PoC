@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Poc;
 
 use App\Enums\CommunicationStatus;
+use App\Enums\ProcessingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Communication;
 use App\Models\ExtractedData;
@@ -15,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AppApiController extends Controller
 {
@@ -75,38 +77,80 @@ class AppApiController extends Controller
         ], 201);
     }
 
-    public function runDocumentOcr(Request $request, DocumentProcessingService $documents): JsonResponse
+    public function runDocumentOcr(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'document' => ['required', 'file', 'mimetypes:application/pdf', 'max:10240'],
         ]);
 
-        try {
-            $original = $documents->handleUpload($validated['document']);
-        } catch (\Throwable $e) {
-            Log::warning('PoC document processing failed', [
-                'message' => $e->getMessage(),
-            ]);
+        $path = $validated['document']->store('documents/originals', 'local');
 
-            return response()->json([
-                'message' => $this->aiFailureMessage($e, 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.'),
-            ], 502);
-        }
-
-        $subDocuments = $original->subDocuments()
-            ->with(['originalDocument', 'extractedData'])
-            ->latest()
-            ->get()
-            ->map(fn (SubDocument $document): array => $this->serializeDocument($document))
-            ->values()
-            ->all();
+        $original = OriginalDocument::create([
+            'file_path' => $path,
+            'original_filename' => $validated['document']->getClientOriginalName(),
+            'processing_status' => ProcessingStatus::Pending,
+        ]);
 
         return response()->json([
-            'message' => 'Documento analizzato: split iniziale e campi OCR disponibili nella sezione risultati.',
-            'document' => $subDocuments[0] ?? null,
-            'documents' => $subDocuments,
+            'streamUrl' => route('poc.api.documents.stream', $original),
+        ], 202);
+    }
+
+    public function streamDocumentProcessing(OriginalDocument $originalDocument, DocumentProcessingService $documents): StreamedResponse
+    {
+        return response()->stream(function () use ($originalDocument, $documents): void {
+            set_time_limit(0);
+
+            $send = function (string $event, array $data): void {
+                echo "event: {$event}\n";
+                echo 'data: '.json_encode($data)."\n\n";
+                if (ob_get_level()) {
+                    ob_flush();
+                }
+                flush();
+            };
+
+            try {
+                $originalDocument->update(['processing_status' => ProcessingStatus::Processing]);
+
+                $subDocuments = $documents->splitIntoSubDocuments($originalDocument);
+
+                foreach ($subDocuments as $subDocument) {
+                    $documents->extractAndSaveFields($subDocument);
+                    $subDocument->refresh()->load(['originalDocument', 'extractedData']);
+                    $send('document', $this->serializeDocument($subDocument));
+                }
+
+                $originalDocument->update(['processing_status' => ProcessingStatus::Completed]);
+                $send('done', ['state' => $this->stateData()]);
+            } catch (\Throwable $e) {
+                Log::warning('PoC document stream processing failed', ['message' => $e->getMessage()]);
+                $originalDocument->update(['processing_status' => ProcessingStatus::Failed]);
+                $send('error', ['message' => $this->aiFailureMessage($e, 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.')]);
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    public function deleteSubDocument(SubDocument $subDocument): JsonResponse
+    {
+        $original = $subDocument->originalDocument;
+
+        Storage::disk('local')->delete($subDocument->file_path);
+        $subDocument->delete();
+
+        if ($original && $original->subDocuments()->doesntExist()) {
+            Storage::disk('local')->delete($original->file_path);
+            $original->delete();
+        }
+
+        return response()->json([
+            'message' => 'Documento eliminato.',
             'state' => $this->stateData(),
-        ], 201);
+        ]);
     }
 
     public function previewSubDocument(SubDocument $subDocument)

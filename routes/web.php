@@ -26,5 +26,11 @@ Route::prefix('poc')
                 Route::post('/documents/ocr', [AppApiController::class, 'runDocumentOcr'])
                     ->middleware('throttle:20,1')
                     ->name('documents.ocr');
+                Route::get('/documents/{originalDocument}/stream', [AppApiController::class, 'streamDocumentProcessing'])
+                    ->whereNumber('originalDocument')
+                    ->name('documents.stream');
+                Route::delete('/documents/{subDocument}', [AppApiController::class, 'deleteSubDocument'])
+                    ->whereNumber('subDocument')
+                    ->name('documents.delete');
             });
     });

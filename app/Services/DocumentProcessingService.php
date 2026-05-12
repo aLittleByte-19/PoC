@@ -42,6 +42,59 @@ class DocumentProcessingService
     }
 
     /**
+     * Split a document into sub-documents without field extraction.
+     *
+     * @return SubDocument[]
+     */
+    public function splitIntoSubDocuments(OriginalDocument $original): array
+    {
+        $segments = $this->normalizeSegments(
+            $this->bedrock->splitDocument($original->file_path),
+            $original->file_path,
+        );
+
+        $subDocuments = [];
+        foreach ($segments as $segment) {
+            $subPath = $this->extractPages(
+                $original->file_path,
+                $original->id,
+                $segment['employee_name'],
+                (int) $segment['start_page'],
+                (int) $segment['end_page'],
+            );
+
+            $subDocuments[] = SubDocument::create([
+                'original_document_id' => $original->id,
+                'file_path' => $subPath,
+                'start_page' => $segment['start_page'],
+                'end_page' => $segment['end_page'],
+            ]);
+        }
+
+        return $subDocuments;
+    }
+
+    /**
+     * Extract fields from a single sub-document and persist to ExtractedData.
+     */
+    public function extractAndSaveFields(SubDocument $subDocument): void
+    {
+        try {
+            $fields = $this->bedrock->extractFields($subDocument->file_path);
+            ExtractedData::create(array_merge(
+                ['sub_document_id' => $subDocument->id],
+                $fields,
+            ));
+        } catch (\Throwable $e) {
+            Log::error('DocumentProcessingService: extraction failed', [
+                'sub_document_id' => $subDocument->id,
+                'message' => $e->getMessage(),
+            ]);
+            $this->createEmptyExtractedData($subDocument);
+        }
+    }
+
+    /**
      * Run AI split + physical PDF splitting for an OriginalDocument.
      */
     public function process(OriginalDocument $original): void
