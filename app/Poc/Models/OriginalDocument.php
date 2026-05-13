@@ -15,6 +15,7 @@ class OriginalDocument extends Model
         'file_path',
         'original_filename',
         'processing_status',
+        'error_message',
     ];
 
     /**

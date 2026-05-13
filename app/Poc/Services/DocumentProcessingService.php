@@ -7,7 +7,6 @@ use App\Poc\Models\ExtractedData;
 use App\Poc\Models\OriginalDocument;
 use App\Poc\Models\SubDocument;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -32,14 +31,6 @@ class DocumentProcessingService
         $safeName = preg_replace('/[^\w.\-]/u', '_', $file->getClientOriginalName()) ?: 'documento.pdf';
 
         return $this->handleStoredFile($path, $safeName);
-    }
-
-    public function handleUpload(UploadedFile $file): OriginalDocument
-    {
-        $original = $this->storeUpload($file);
-        $this->process($original);
-
-        return $original;
     }
 
     public function handleStoredFile(string $path, string $filename): OriginalDocument
@@ -69,59 +60,40 @@ class DocumentProcessingService
     }
 
     /**
-     * Process an upload end-to-end while keeping file cleanup aligned with DB commits.
+     * Process each segment individually so the SSE stream can observe sub-documents
+     * appearing one at a time as they are committed to the database.
      */
     public function process(OriginalDocument $original): void
     {
-        $original->update(['processing_status' => ProcessingStatus::Processing]);
-
-        $createdSplitPaths = [];
-        $committed = false;
+        $absoluteSource = null;
 
         try {
-            $segments = $this->analyzeDocumentStructure($original);
-            $preparedSegments = [];
+            $absoluteSource = $this->copyStorageFileToTemporaryPath($original->file_path);
+            $pdf = new Fpdi;
+            $pageCount = max(1, $pdf->setSourceFile($absoluteSource));
 
-            // Prepare files before mutating records so a failed transaction leaves existing splits intact.
-            foreach ($segments as $segment) {
-                $preparedSegment = $this->prepareSplitSegment($original, $segment);
-                $createdSplitPaths[] = $preparedSegment['file_path'];
-                $preparedSegments[] = $preparedSegment;
-            }
+            $segments = $this->normalizeSegments(
+                $this->splitDocument($original->file_path),
+                $pageCount
+            );
 
-            $oldSplitPaths = [];
-
-            DB::transaction(function () use ($preparedSegments, $original, &$oldSplitPaths): void {
-                $oldSplitPaths = $this->deleteExistingSplitRecords($original);
-
-                foreach ($preparedSegments as $segment) {
-                    $subDocument = $this->createSubDocumentFromPreparedSegment($original, $segment);
-                    $this->runDataExtraction($subDocument);
-                }
-            });
-
-            $committed = true;
+            $oldSplitPaths = $this->deleteExistingSplitRecords($original);
             $this->deleteStoragePaths($oldSplitPaths);
+
+            foreach ($segments as $segment) {
+                $preparedSegment = $this->prepareSplitSegment($original, $segment, $absoluteSource);
+                $subDocument = $this->createSubDocumentFromPreparedSegment($original, $preparedSegment);
+                $this->extractAndSaveFields($subDocument);
+            }
 
             $original->update(['processing_status' => ProcessingStatus::Completed]);
         } catch (\Throwable $e) {
-            if (! $committed) {
-                $this->deleteStoragePaths($createdSplitPaths);
-            }
-
             $this->handleProcessingFailure($original, $e);
+        } finally {
+            if ($absoluteSource !== null) {
+                File::delete($absoluteSource);
+            }
         }
-    }
-
-    /**
-     * @return array<int, array{employee_name: string, start_page: int, end_page: int}>
-     */
-    private function analyzeDocumentStructure(OriginalDocument $original): array
-    {
-        return $this->normalizeSegments(
-            $this->splitDocument($original->file_path),
-            $original->file_path
-        );
     }
 
     /**
@@ -130,10 +102,10 @@ class DocumentProcessingService
      * @param  array{employee_name: string, start_page: int, end_page: int}  $segment
      * @return array{employee_name: string, start_page: int, end_page: int, file_path: string}
      */
-    private function prepareSplitSegment(OriginalDocument $original, array $segment): array
+    private function prepareSplitSegment(OriginalDocument $original, array $segment, string $absoluteSource): array
     {
         $splitPath = $this->extractPages(
-            $original->file_path,
+            $absoluteSource,
             $original->id,
             $segment['employee_name'],
             (int) $segment['start_page'],
@@ -156,21 +128,6 @@ class DocumentProcessingService
         ]);
     }
 
-    private function runDataExtraction(SubDocument $subDocument): void
-    {
-        try {
-            $fields = $this->extractFields($subDocument->file_path);
-
-            ExtractedData::create(array_merge(
-                ['sub_document_id' => $subDocument->id],
-                $fields
-            ));
-        } catch (\Throwable $e) {
-            Log::warning("Extraction failed for split {$subDocument->id}", ['error' => $e->getMessage()]);
-            $this->createEmptyExtractedData($subDocument);
-        }
-    }
-
     /**
      * Mark the document as failed, then rethrow so the queue can apply its retry policy.
      *
@@ -183,7 +140,10 @@ class DocumentProcessingService
             'error' => $e->getMessage(),
         ]);
 
-        $original->update(['processing_status' => ProcessingStatus::Failed]);
+        $original->update([
+            'processing_status' => ProcessingStatus::Failed,
+            'error_message' => BedrockService::formatUserError($e, 'Analisi documento non disponibile. Verifica la configurazione AI nel pannello admin.'),
+        ]);
 
         throw $e;
     }
@@ -231,10 +191,8 @@ class DocumentProcessingService
      * @param  array<int, array{employee_name?: string, start_page?: int, end_page?: int}>  $segments
      * @return array<int, array{employee_name: string, start_page: int, end_page: int}>
      */
-    private function normalizeSegments(array $segments, string $sourcePath): array
+    private function normalizeSegments(array $segments, int $pageCount): array
     {
-        $pageCount = $this->pageCount($sourcePath);
-
         if ($segments === []) {
             return [[
                 'employee_name' => 'documento',
@@ -323,14 +281,14 @@ class DocumentProcessingService
     }
 
     /**
-     * Extract a page range from a PDF and write it to storage.
+     * Extract a page range from an already-resolved absolute path and write it to storage.
+     * The caller is responsible for the lifecycle of $absoluteSource.
      *
      * @return string Relative path within the configured document disk
      */
-    private function extractPages(string $sourcePath, int $originalId, string $employeeName, int $startPage, int $endPage): string
+    private function extractPages(string $absoluteSource, int $originalId, string $employeeName, int $startPage, int $endPage): string
     {
         $pdf = new Fpdi;
-        $absoluteSource = $this->copyStorageFileToTemporaryPath($sourcePath);
         $absoluteDest = $this->temporaryPath('split_');
 
         try {
@@ -354,19 +312,7 @@ class DocumentProcessingService
 
             return $relativePath;
         } finally {
-            File::delete([$absoluteSource, $absoluteDest]);
-        }
-    }
-
-    private function pageCount(string $sourcePath): int
-    {
-        $pdf = new Fpdi;
-        $absoluteSource = $this->copyStorageFileToTemporaryPath($sourcePath);
-
-        try {
-            return max(1, $pdf->setSourceFile($absoluteSource));
-        } finally {
-            File::delete($absoluteSource);
+            File::delete($absoluteDest);
         }
     }
 

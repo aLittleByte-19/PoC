@@ -9,13 +9,15 @@ use App\Poc\Services\BedrockService;
 use App\Poc\Services\DocumentProcessingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use setasign\Fpdi\Fpdi;
 
 uses(RefreshDatabase::class);
 
 function pocPdfUpload(string $filename = 'cedolino.pdf'): UploadedFile
 {
-    $pdf = new FPDF;
+    $pdf = new Fpdi;
     $pdf->AddPage();
     $pdf->SetFont('Arial', '', 12);
     $pdf->Cell(0, 10, 'Cedolino dimostrativo PoC');
@@ -91,6 +93,7 @@ test('document upload performs initial split and field extraction', function () 
         'services.documents.ocr_driver' => 'bedrock',
     ]);
 
+    Queue::fake();
     Storage::fake('s3');
 
     $this->mock(BedrockService::class, function ($mock) {
@@ -121,11 +124,11 @@ test('document upload performs initial split and field extraction', function () 
     $document = OriginalDocument::query()->first();
     Storage::disk('s3')->assertExists($document->file_path);
 
-    // Manually trigger the job to simulate queue processing in the test environment.
+    // Run the job manually: commits each sub-document individually as in production.
     (new ProcessOriginalDocumentJob($document))
         ->handle(app(DocumentProcessingService::class));
 
-    // The sync-queue path exits early after replaying generated progress events.
+    // Stream finds the document already completed and flushes all results.
     $streamResponse = $this->get($uploadResponse->json('streamUrl'))->assertOk();
     ob_start();
     $streamResponse->baseResponse->sendContent();
@@ -148,6 +151,7 @@ test('document upload uses local extraction when ocr driver is local', function 
         'services.bedrock.poc_confidence_threshold' => 72,
     ]);
 
+    Queue::fake();
     Storage::fake('s3');
 
     $this->mock(BedrockService::class, function ($mock) {

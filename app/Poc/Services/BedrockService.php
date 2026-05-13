@@ -234,6 +234,25 @@ class BedrockService
         }
     }
 
+    public static function formatUserError(\Throwable $e, string $fallback): string
+    {
+        $message = strtolower($e->getMessage());
+
+        if (str_contains($message, 'expiredtoken')) {
+            return 'Le credenziali AWS temporanee sono scadute. Aggiorna AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN nel pannello admin.';
+        }
+
+        if (str_contains($message, 'model access is denied')) {
+            return 'Il modello Bedrock configurato non è accessibile con queste credenziali. Usa un modello abilitato (es. amazon.nova-lite-v1:0).';
+        }
+
+        if (str_contains($message, 'on-demand throughput') || str_contains($message, 'inference profile')) {
+            return 'Il modello Bedrock richiede un inference profile. Aggiorna BEDROCK_MODEL_ID nel pannello admin.';
+        }
+
+        return $fallback;
+    }
+
     private function documentDisk(): string
     {
         return config('filesystems.default', 'local');

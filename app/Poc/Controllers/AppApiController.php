@@ -43,7 +43,7 @@ class AppApiController
             Log::warning('PoC communication generation failed', ['message' => $e->getMessage()]);
 
             throw new AiServiceException(
-                $this->formatAiError($e, 'Generazione non disponibile. Verifica la configurazione AI.'),
+                BedrockService::formatUserError($e, 'Generazione non disponibile. Verifica la configurazione AI.'),
                 502,
                 $e
             );
@@ -70,6 +70,7 @@ class AppApiController
         $validated = $request->validated();
 
         $original = $documents->storeUpload($validated['document']);
+        $original->update(['processing_status' => ProcessingStatus::Processing]);
 
         ProcessOriginalDocumentJob::dispatch($original);
 
@@ -80,7 +81,7 @@ class AppApiController
     }
 
     /**
-     * Stream newly extracted sub-documents until processing completes, fails, or times out.
+     * Poll the database and stream sub-documents via SSE as the queue job commits them one at a time.
      */
     public function streamDocumentProcessing(OriginalDocument $originalDocument): StreamedResponse
     {
@@ -128,7 +129,7 @@ class AppApiController
                 }
 
                 if ($freshDocument->processing_status === ProcessingStatus::Failed) {
-                    $send('error', ['message' => 'Analisi documento non disponibile.']);
+                    $send('error', ['message' => $freshDocument->error_message ?: 'Analisi documento non disponibile.']);
 
                     return;
                 }
@@ -139,7 +140,6 @@ class AppApiController
                     return;
                 }
 
-                // Unit tests use sync queues; avoid blocking the response stream.
                 if (app()->runningUnitTests()) {
                     return;
                 }
@@ -156,13 +156,16 @@ class AppApiController
     public function deleteSubDocument(SubDocument $subDocument): JsonResponse
     {
         $original = $subDocument->originalDocument;
+        $disk = config('filesystems.default', 'local');
+        $subFilePath = $subDocument->file_path;
 
-        Storage::disk($this->documentDisk())->delete($subDocument->file_path);
         $subDocument->delete();
+        Storage::disk($disk)->delete($subFilePath);
 
         if ($original && $original->subDocuments()->doesntExist()) {
-            Storage::disk($this->documentDisk())->delete($original->file_path);
+            $originalFilePath = $original->file_path;
             $original->delete();
+            Storage::disk($disk)->delete($originalFilePath);
         }
 
         return response()->json([
@@ -173,7 +176,7 @@ class AppApiController
 
     public function previewSubDocument(SubDocument $subDocument): StreamedResponse
     {
-        $disk = Storage::disk($this->documentDisk());
+        $disk = Storage::disk(config('filesystems.default', 'local'));
 
         abort_unless($disk->exists($subDocument->file_path), 404);
 
@@ -215,20 +218,16 @@ class AppApiController
      */
     private function getAssistantState(): array
     {
-        $all = Communication::query()->latest()->get();
+        $total = Communication::query()->count();
+        $drafts = Communication::query()->where('status', CommunicationStatus::Draft)->count();
+        $history = Communication::query()->latest()->limit(10)->get();
 
         return [
             'metrics' => [
-                [
-                    'value' => $all->count(),
-                    'label' => 'Contenuti generati',
-                ],
-                [
-                    'value' => $all->where('status', CommunicationStatus::Draft)->count(),
-                    'label' => 'Bozze generate',
-                ],
+                ['value' => $total, 'label' => 'Contenuti generati'],
+                ['value' => $drafts, 'label' => 'Bozze generate'],
             ],
-            'history' => $all->take(10)->map(fn ($c) => $this->serializeCommunication($c))->values()->all(),
+            'history' => $history->map(fn ($c) => $this->serializeCommunication($c))->values()->all(),
         ];
     }
 
@@ -244,7 +243,7 @@ class AppApiController
             ->get();
 
         $originalCount = OriginalDocument::query()->count();
-        $confidenceThreshold = (int) env('POC_CONFIDENCE_THRESHOLD', 80);
+        $confidenceThreshold = (int) config('services.bedrock.poc_confidence_threshold', 80);
 
         return [
             'metrics' => [
@@ -306,29 +305,5 @@ class AppApiController
                 'Campi OCR rilevati dal servizio AI configurato o dal fallback PoC.',
             ],
         ];
-    }
-
-    private function formatAiError(\Throwable $exception, string $fallback): string
-    {
-        $message = strtolower($exception->getMessage());
-
-        if (str_contains($message, 'expiredtoken')) {
-            return 'Le credenziali AWS temporanee sono scadute. Aggiorna AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN, poi ricarica la configurazione.';
-        }
-
-        if (str_contains($message, 'model access is denied')) {
-            return 'Il modello Bedrock configurato non è accessibile con queste credenziali. Usa un modello abilitato, ad esempio amazon.nova-lite-v1:0.';
-        }
-
-        if (str_contains($message, 'on-demand throughput') || str_contains($message, 'inference profile')) {
-            return 'Il modello Bedrock richiede un inference profile. Aggiorna BEDROCK_MODEL_ID con un profilo valido oppure usa amazon.nova-lite-v1:0.';
-        }
-
-        return $fallback;
-    }
-
-    private function documentDisk(): string
-    {
-        return config('filesystems.default', 'local');
     }
 }

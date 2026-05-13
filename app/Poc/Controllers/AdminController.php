@@ -16,9 +16,9 @@ class AdminController
 
         return view('poc.admin', [
             'settings' => $settings,
-            'awsCredentialsStatus' => $this->awsCredentialsStatus($settings),
-            'awsCredentialRows' => $this->awsCredentialRows($settings),
-            'runtimeStatus' => $this->runtimeStatus($settings),
+            'awsCredentialsStatus' => $this->awsCredentialsStatus(),
+            'awsCredentialRows' => $this->awsCredentialRows(),
+            'runtimeStatus' => $this->runtimeStatus(),
         ]);
     }
 
@@ -128,48 +128,43 @@ class AdminController
         ];
     }
 
-    /**
-     * @param  array<string, mixed>  $settings
-     */
-    private function awsCredentialsStatus(array $settings): string
+    private function awsCredentialsStatus(): string
     {
-        $hasKey = filled($settings['aws_access_key_id'] ?? null) || filled($this->environmentValue('AWS_ACCESS_KEY_ID'));
-        $hasSecret = filled($settings['aws_secret_access_key'] ?? null) || filled($this->environmentValue('AWS_SECRET_ACCESS_KEY'));
+        $hasKey = filled($this->environmentValue('AWS_ACCESS_KEY_ID'));
+        $hasSecret = filled($this->environmentValue('AWS_SECRET_ACCESS_KEY'));
 
         return $hasKey && $hasSecret ? 'Configurate' : 'Mancanti';
     }
 
     /**
-     * @param  array<string, mixed>  $settings
      * @return array<int, array{label: string, configured: bool}>
      */
-    private function awsCredentialRows(array $settings): array
+    private function awsCredentialRows(): array
     {
         return [
             [
                 'label' => 'Access key ID',
-                'configured' => filled($settings['aws_access_key_id'] ?? null) || filled($this->environmentValue('AWS_ACCESS_KEY_ID')),
+                'configured' => filled($this->environmentValue('AWS_ACCESS_KEY_ID')),
             ],
             [
                 'label' => 'Secret access key',
-                'configured' => filled($settings['aws_secret_access_key'] ?? null) || filled($this->environmentValue('AWS_SECRET_ACCESS_KEY')),
+                'configured' => filled($this->environmentValue('AWS_SECRET_ACCESS_KEY')),
             ],
             [
                 'label' => 'Session token',
-                'configured' => filled($settings['aws_session_token'] ?? null) || filled($this->environmentValue('AWS_SESSION_TOKEN')),
+                'configured' => filled($this->environmentValue('AWS_SESSION_TOKEN')),
             ],
         ];
     }
 
     /**
-     * @param  array<string, mixed>  $settings
      * @return array{bedrock: string, credentials: string, analysis: string, ocr: string, queue: string, storage: string}
      */
-    private function runtimeStatus(array $settings): array
+    private function runtimeStatus(): array
     {
         return [
             'bedrock' => $this->environmentBoolean('BEDROCK_ENABLED') ? 'Reale' : 'Simulato',
-            'credentials' => $this->awsCredentialsStatus($settings),
+            'credentials' => $this->awsCredentialsStatus(),
             'analysis' => $this->environmentValue('DOCUMENT_CLASSIFIER_DRIVER', 'fake') === 'bedrock' ? 'Bedrock' : 'Simulata',
             'ocr' => $this->environmentValue('DOCUMENT_OCR_DRIVER', 'local') === 'bedrock' ? 'Bedrock' : 'Locale',
             'queue' => $this->environmentValue('QUEUE_CONNECTION', 'sync') === 'redis' ? 'Redis' : 'Sincrona',
