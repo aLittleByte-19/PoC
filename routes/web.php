@@ -1,7 +1,7 @@
 <?php
 
-use App\Poc\Controllers\AppApiController;
 use App\Poc\Controllers\AdminController;
+use App\Poc\Controllers\AppApiController;
 use App\Poc\Controllers\PocController;
 use Illuminate\Support\Facades\Route;
 

@@ -1,7 +1,8 @@
 <?php
 
-use Illuminate\Foundation\Application;
 use App\Poc\Commands\ResetPocData;
+use App\Poc\Exceptions\AiServiceException;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ResetPocData::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Keep this step so Laravel registers the default "web" middleware group.
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AiServiceException $exception, Request $request) {

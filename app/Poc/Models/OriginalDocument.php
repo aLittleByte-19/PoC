@@ -7,9 +7,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/**
- * Model representing an original uploaded document.
- */
 class OriginalDocument extends Model
 {
     use HasFactory;
@@ -21,8 +18,6 @@ class OriginalDocument extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -32,11 +27,6 @@ class OriginalDocument extends Model
         ];
     }
 
-    /**
-     * Get the sub-documents associated with this original document.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
     public function subDocuments(): HasMany
     {
         return $this->hasMany(SubDocument::class);

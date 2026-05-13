@@ -8,16 +8,8 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\View\View;
 
-/**
- * Controller for managing PoC administrative settings and data resets.
- */
 class AdminController
 {
-    /**
-     * Display the administrative dashboard.
-     *
-     * @return \Illuminate\View\View
-     */
     public function index(): View
     {
         $settings = $this->settings();
@@ -30,20 +22,12 @@ class AdminController
         ]);
     }
 
-    /**
-     * Save updated settings.
-     *
-     * @param  \App\Poc\Requests\SaveSettingsRequest  $request
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function save(SaveSettingsRequest $request): RedirectResponse
     {
         $state = $request->validated();
 
         $bedrockEnabled = $state['bedrock_enabled'];
-        $textractEnabled = $state['textract_enabled'];
-
-        if (! $this->settingsAreValid($state, $bedrockEnabled, $textractEnabled)) {
+        if (! $this->settingsAreValid($state, $bedrockEnabled)) {
             return back()->withInput();
         }
 
@@ -53,8 +37,8 @@ class AdminController
             'BEDROCK_MODEL_ID' => trim((string) $state['bedrock_model_id']),
             'DOCUMENT_OCR_DRIVER' => $state['document_ocr_driver'],
             'DOCUMENT_CLASSIFIER_DRIVER' => $state['document_classifier_driver'],
-            'TEXTRACT_ENABLED' => $textractEnabled ? 'true' : 'false',
-            'TEXTRACT_AWS_REGION' => trim((string) $state['textract_aws_region']),
+            'TEXTRACT_ENABLED' => 'false',
+            'TEXTRACT_AWS_REGION' => trim((string) ($state['textract_aws_region'] ?? $this->environmentValue('TEXTRACT_AWS_REGION', 'eu-north-1'))),
             'POC_CONFIDENCE_THRESHOLD' => (string) max(0, min(100, (int) $state['poc_confidence_threshold'])),
         ];
 
@@ -78,11 +62,6 @@ class AdminController
             ->with('status', 'Configurazione salvata. I nuovi job useranno i valori aggiornati.');
     }
 
-    /**
-     * Apply simulation default settings.
-     *
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function useSimulationDefaults(): RedirectResponse
     {
         $this->writeEnvironment([
@@ -100,11 +79,6 @@ class AdminController
             ->with('status', 'Preset simulazione applicato.');
     }
 
-    /**
-     * Clear AWS credentials from the environment.
-     *
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function clearAwsCredentials(): RedirectResponse
     {
         $this->writeEnvironment([
@@ -113,6 +87,7 @@ class AdminController
             'AWS_ACCESS_KEY_ID' => '',
             'AWS_SECRET_ACCESS_KEY' => '',
             'AWS_SESSION_TOKEN' => '',
+            'DOCUMENT_OCR_DRIVER' => 'local',
         ]);
 
         $this->refreshRuntimeConfiguration();
@@ -122,11 +97,6 @@ class AdminController
             ->with('status', 'Credenziali AWS rimosse.');
     }
 
-    /**
-     * Reset all PoC processing data.
-     *
-     * @return \Illuminate\Http\RedirectResponse
-     */
     public function resetData(): RedirectResponse
     {
         Artisan::call('poc:reset-data', ['--force' => true]);
@@ -137,7 +107,7 @@ class AdminController
     }
 
     /**
-     * Get current settings from the environment.
+     * Normalized settings shown by the admin Blade view.
      *
      * @return array<string, mixed>
      */
@@ -159,10 +129,7 @@ class AdminController
     }
 
     /**
-     * Get the status of AWS credentials.
-     *
      * @param  array<string, mixed>  $settings
-     * @return string
      */
     private function awsCredentialsStatus(array $settings): string
     {
@@ -173,8 +140,6 @@ class AdminController
     }
 
     /**
-     * Get the status rows for AWS credentials.
-     *
      * @param  array<string, mixed>  $settings
      * @return array<int, array{label: string, configured: bool}>
      */
@@ -197,8 +162,6 @@ class AdminController
     }
 
     /**
-     * Get the runtime status of various components.
-     *
      * @param  array<string, mixed>  $settings
      * @return array{bedrock: string, credentials: string, analysis: string, ocr: string, queue: string, storage: string}
      */
@@ -208,21 +171,16 @@ class AdminController
             'bedrock' => $this->environmentBoolean('BEDROCK_ENABLED') ? 'Reale' : 'Simulato',
             'credentials' => $this->awsCredentialsStatus($settings),
             'analysis' => $this->environmentValue('DOCUMENT_CLASSIFIER_DRIVER', 'fake') === 'bedrock' ? 'Bedrock' : 'Simulata',
-            'ocr' => $this->environmentValue('DOCUMENT_OCR_DRIVER', 'local') === 'textract' ? 'Textract' : 'Locale',
+            'ocr' => $this->environmentValue('DOCUMENT_OCR_DRIVER', 'local') === 'bedrock' ? 'Bedrock' : 'Locale',
             'queue' => $this->environmentValue('QUEUE_CONNECTION', 'sync') === 'redis' ? 'Redis' : 'Sincrona',
             'storage' => $this->environmentValue('FILESYSTEM_DISK', 'local') === 's3' ? 'MinIO / S3' : 'Locale',
         ];
     }
 
     /**
-     * Validate settings.
-     *
      * @param  array<string, mixed>  $state
-     * @param  bool  $bedrockEnabled
-     * @param  bool  $textractEnabled
-     * @return bool
      */
-    private function settingsAreValid(array $state, bool $bedrockEnabled, bool $textractEnabled): bool
+    private function settingsAreValid(array $state, bool $bedrockEnabled): bool
     {
         $accessKey = trim((string) ($state['aws_access_key_id'] ?? ''));
         $hasKey = filled($accessKey) || filled($this->environmentValue('AWS_ACCESS_KEY_ID'));
@@ -242,8 +200,8 @@ class AdminController
             return false;
         }
 
-        if ($ocrDriver === 'textract' && ! $textractEnabled) {
-            session()->flash('error', 'Abilita Textract reale oppure lascia OCR su Locale / simulato.');
+        if ($ocrDriver === 'bedrock' && ! $bedrockEnabled) {
+            session()->flash('error', 'Abilita Bedrock reale oppure lascia OCR su Locale / simulato.');
 
             return false;
         }
@@ -252,10 +210,9 @@ class AdminController
     }
 
     /**
-     * Write updates to the .env file.
+     * Values are escaped for .env before being written as scalar strings.
      *
      * @param  array<string, string>  $updates
-     * @return void
      */
     private function writeEnvironment(array $updates): void
     {
@@ -281,23 +238,12 @@ class AdminController
         File::put($envPath, $contents);
     }
 
-    /**
-     * Refresh the runtime configuration.
-     *
-     * @return void
-     */
     private function refreshRuntimeConfiguration(): void
     {
         Artisan::call('config:clear');
         Artisan::call('queue:restart');
     }
 
-    /**
-     * Format a value for the .env file.
-     *
-     * @param  string  $value
-     * @return string
-     */
     private function formatEnvironmentValue(string $value): string
     {
         if ($value === '') {
@@ -311,24 +257,13 @@ class AdminController
         return '"'.str_replace(['\\', '"'], ['\\\\', '\\"'], $value).'"';
     }
 
-    /**
-     * Get a boolean value from the environment.
-     *
-     * @param  string  $key
-     * @param  bool  $default
-     * @return bool
-     */
     private function environmentBoolean(string $key, bool $default = false): bool
     {
         return filter_var($this->environmentValue($key, $default ? 'true' : 'false'), FILTER_VALIDATE_BOOL);
     }
 
     /**
-     * Get a value from the environment.
-     *
-     * @param  string  $key
-     * @param  mixed  $default
-     * @return mixed
+     * Read directly from .env so the admin page reflects pending config-file edits.
      */
     private function environmentValue(string $key, mixed $default = null): mixed
     {

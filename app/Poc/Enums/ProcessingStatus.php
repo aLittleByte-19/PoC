@@ -2,9 +2,6 @@
 
 namespace App\Poc\Enums;
 
-/**
- * Enumeration of document processing statuses.
- */
 enum ProcessingStatus: string
 {
     case Pending = 'pending';
@@ -12,11 +9,6 @@ enum ProcessingStatus: string
     case Completed = 'completed';
     case Failed = 'failed';
 
-    /**
-     * Get the human-readable label for the status.
-     *
-     * @return string
-     */
     public function label(): string
     {
         return match ($this) {
@@ -27,11 +19,6 @@ enum ProcessingStatus: string
         };
     }
 
-    /**
-     * Get the color associated with the status.
-     *
-     * @return string
-     */
     public function color(): string
     {
         return match ($this) {

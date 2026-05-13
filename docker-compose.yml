@@ -28,6 +28,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-nexum}
       DB_PASSWORD: ${DB_PASSWORD:-nexum}
       QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_QUEUE_RETRY_AFTER: ${REDIS_QUEUE_RETRY_AFTER:-360}
       REDIS_HOST: ${REDIS_HOST:-redis}
       FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
       AWS_STORAGE_ACCESS_KEY_ID: ${AWS_STORAGE_ACCESS_KEY_ID:-minioadmin}
@@ -54,7 +55,7 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    command: php artisan queue:work redis --sleep=3 --tries=3 --timeout=120
+    command: php artisan queue:work redis --sleep=3 --tries=3 --timeout=330
     restart: unless-stopped
     environment:
       COMPOSER_INSTALL_ON_STARTUP: ${COMPOSER_INSTALL_ON_STARTUP:-true}
@@ -68,6 +69,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-nexum}
       DB_PASSWORD: ${DB_PASSWORD:-nexum}
       QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_QUEUE_RETRY_AFTER: ${REDIS_QUEUE_RETRY_AFTER:-360}
       REDIS_HOST: ${REDIS_HOST:-redis}
       FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
       AWS_STORAGE_ACCESS_KEY_ID: ${AWS_STORAGE_ACCESS_KEY_ID:-minioadmin}

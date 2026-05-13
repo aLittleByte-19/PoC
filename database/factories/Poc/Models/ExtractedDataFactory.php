@@ -11,11 +11,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class ExtractedDataFactory extends Factory
 {
-    protected $model = \App\Poc\Models\ExtractedData::class;
+    protected $model = ExtractedData::class;
 
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -32,11 +30,6 @@ class ExtractedDataFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the extracted data has null fields.
-     *
-     * @return static
-     */
     public function withNullFields(): static
     {
         return $this->state([

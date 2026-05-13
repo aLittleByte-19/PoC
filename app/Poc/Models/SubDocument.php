@@ -8,9 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-/**
- * Model representing a part of an original document (e.g., a single page).
- */
 class SubDocument extends Model
 {
     use HasFactory;
@@ -24,8 +21,6 @@ class SubDocument extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -37,21 +32,11 @@ class SubDocument extends Model
         ];
     }
 
-    /**
-     * Get the original document that this sub-document belongs to.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
     public function originalDocument(): BelongsTo
     {
         return $this->belongsTo(OriginalDocument::class);
     }
 
-    /**
-     * Get the extracted data associated with this sub-document.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasOne
-     */
     public function extractedData(): HasOne
     {
         return $this->hasOne(ExtractedData::class);

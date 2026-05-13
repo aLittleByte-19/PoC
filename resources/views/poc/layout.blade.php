@@ -24,7 +24,7 @@
       <header class="topbar" id="workspace-top">
         <div>
           <p class="eyebrow">NEXUM PoC</p>
-          <h2>@yield('header-title')</h2>
+          <h1>@yield('header-title')</h1>
         </div>
         <div class="session-actions">
           @yield('header-actions')

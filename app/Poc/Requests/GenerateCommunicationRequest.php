@@ -2,12 +2,10 @@
 
 namespace App\Poc\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Request for generating a communication.
- */
 class GenerateCommunicationRequest extends FormRequest
 {
     private const TONES = [
@@ -24,20 +22,13 @@ class GenerateCommunicationRequest extends FormRequest
         'Aggiornamento breve',
     ];
 
-    /**
-     * Determine if the user is authorized to make this request.
-     *
-     * @return bool
-     */
     public function authorize(): bool
     {
         return true;
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {

@@ -6,9 +6,6 @@ use App\Poc\Enums\CommunicationStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Model representing a generated communication.
- */
 class Communication extends Model
 {
     use HasFactory;
@@ -23,8 +20,6 @@ class Communication extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array

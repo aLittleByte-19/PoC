@@ -12,8 +12,8 @@
 
 @section('header-actions')
     <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Attiva tema scuro" aria-pressed="false">
-        <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
-        <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+        <span class="theme-icon theme-icon-sun" aria-hidden="true"></span>
+        <span class="theme-icon theme-icon-moon" aria-hidden="true"></span>
     </button>
 @endsection
 

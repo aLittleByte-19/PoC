@@ -11,11 +11,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class OriginalDocumentFactory extends Factory
 {
-    protected $model = \App\Poc\Models\OriginalDocument::class;
+    protected $model = OriginalDocument::class;
 
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -27,21 +25,11 @@ class OriginalDocumentFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the document processing is completed.
-     *
-     * @return static
-     */
     public function completed(): static
     {
         return $this->state(['processing_status' => ProcessingStatus::Completed]);
     }
 
-    /**
-     * Indicate that the document processing failed.
-     *
-     * @return static
-     */
     public function failed(): static
     {
         return $this->state(['processing_status' => ProcessingStatus::Failed]);

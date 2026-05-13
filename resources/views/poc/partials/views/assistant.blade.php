@@ -3,7 +3,7 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">AI Assistant</p>
-        <h3>Genera una bozza</h3>
+        <h2>Genera una bozza</h2>
       </div>
     </div>
 
@@ -51,7 +51,7 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">Risultato</p>
-        <h3>Bozza generata</h3>
+        <h2>Bozza generata</h2>
       </div>
     </div>
 

@@ -43,7 +43,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Configurazione locale</p>
-              <h3>Runtime e servizi AI</h3>
+              <h2>Runtime e servizi AI</h2>
             </div>
           </div>
           <p class="panel-note">Gestisci simulazioni, credenziali temporanee AWS e pulizia dei dati generati.</p>
@@ -81,7 +81,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Credenziali</p>
-              <h3>Rimozione rapida</h3>
+              <h2>Rimozione rapida</h2>
             </div>
           </div>
           <p class="panel-note">Disabilita Bedrock reale e rimuove access key, secret e session token dal file `.env`.</p>
@@ -97,7 +97,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Modalità</p>
-                <h3>Driver PoC</h3>
+                <h2>Driver PoC</h2>
               </div>
             </div>
 
@@ -123,23 +123,12 @@
                 <span>OCR</span>
                 <select name="document_ocr_driver" required>
                   <option value="local" @selected(old('document_ocr_driver', $settings['document_ocr_driver']) === 'local')>Locale / simulato</option>
-                  <option value="textract" @selected(old('document_ocr_driver', $settings['document_ocr_driver']) === 'textract')>AWS Textract</option>
+                  <option value="bedrock" @selected(old('document_ocr_driver', $settings['document_ocr_driver']) === 'bedrock')>Bedrock</option>
                 </select>
               </label>
 
-              <label class="switch-row">
-                <span>
-                  <strong>Textract reale</strong>
-                  <small>Abilita l'OCR tramite AWS Textract.</small>
-                </span>
-                <input type="hidden" name="textract_enabled" value="0">
-                <input type="checkbox" name="textract_enabled" value="1" @checked((bool) old('textract_enabled', $settings['textract_enabled']))>
-              </label>
-
-              <label class="field">
-                <span>Regione Textract</span>
-                <input type="text" name="textract_aws_region" value="{{ old('textract_aws_region', $settings['textract_aws_region']) }}" required>
-              </label>
+              <input type="hidden" name="textract_enabled" value="0">
+              <input type="hidden" name="textract_aws_region" value="{{ old('textract_aws_region', $settings['textract_aws_region']) }}">
 
               <label class="field">
                 <span>Soglia confidenza</span>
@@ -152,7 +141,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">AWS Bedrock</p>
-                <h3>Credenziali e modello</h3>
+                <h2>Credenziali e modello</h2>
               </div>
               <span class="admin-pill">{{ $awsCredentialsStatus }}</span>
             </div>

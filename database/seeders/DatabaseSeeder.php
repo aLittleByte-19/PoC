@@ -9,11 +9,6 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     *
-     * @return void
-     */
     public function run(): void
     {
         // No default seeding required for public PoC.

@@ -12,11 +12,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class SubDocumentFactory extends Factory
 {
-    protected $model = \App\Poc\Models\SubDocument::class;
+    protected $model = SubDocument::class;
 
     /**
-     * Define the model's default state.
-     *
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -32,21 +30,11 @@ class SubDocumentFactory extends Factory
         ];
     }
 
-    /**
-     * Indicate that the sub-document is pending.
-     *
-     * @return static
-     */
     public function pending(): static
     {
         return $this->state(['send_status' => SendStatus::Pending]);
     }
 
-    /**
-     * Indicate that the sub-document has been sent.
-     *
-     * @return static
-     */
     public function sent(): static
     {
         return $this->state(['send_status' => SendStatus::Sent]);

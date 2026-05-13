@@ -3,7 +3,7 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">Co-Pilot CdL</p>
-        <h3>Rileva campi e split iniziale</h3>
+        <h2>Rileva campi e split iniziale</h2>
       </div>
     </div>
 
@@ -15,7 +15,7 @@
       <strong>Seleziona un PDF</strong>
       <span>Il sistema avvia automaticamente split iniziale ed estrazione campi.</span>
     </button>
-    <input class="hidden" id="document-file-input" type="file" accept="application/pdf">
+    <input class="hidden" id="document-file-input" name="document" type="file" accept="application/pdf" aria-label="Seleziona un PDF">
 
     <ul class="compact-list">
       <li><strong>Stato</strong><span id="upload-state">In attesa di caricamento</span></li>
@@ -27,7 +27,7 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">Risultati</p>
-        <h3>Documenti rilevati</h3>
+        <h2>Documenti rilevati</h2>
       </div>
     </div>
 
@@ -45,7 +45,7 @@
     <div class="panel-heading">
       <div>
         <p class="eyebrow">Dettaglio</p>
-        <h3 id="detail-title">Sotto-documento selezionato</h3>
+        <h2 id="detail-title">Sotto-documento selezionato</h2>
       </div>
     </div>
 

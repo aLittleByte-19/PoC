@@ -6,9 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * Model representing data extracted from a document by AI.
- */
 class ExtractedData extends Model
 {
     use HasFactory;
@@ -25,8 +22,6 @@ class ExtractedData extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -37,11 +32,6 @@ class ExtractedData extends Model
         ];
     }
 
-    /**
-     * Get the sub-document that owns the extracted data.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
-     */
     public function subDocument(): BelongsTo
     {
         return $this->belongsTo(SubDocument::class);

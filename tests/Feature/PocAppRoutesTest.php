@@ -1,10 +1,12 @@
 <?php
 
+use App\Poc\Jobs\ProcessOriginalDocumentJob;
 use App\Poc\Models\Communication;
 use App\Poc\Models\ExtractedData;
 use App\Poc\Models\OriginalDocument;
 use App\Poc\Models\SubDocument;
 use App\Poc\Services\BedrockService;
+use App\Poc\Services\DocumentProcessingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -13,7 +15,7 @@ uses(RefreshDatabase::class);
 
 function pocPdfUpload(string $filename = 'cedolino.pdf'): UploadedFile
 {
-    $pdf = new \FPDF;
+    $pdf = new FPDF;
     $pdf->AddPage();
     $pdf->SetFont('Arial', '', 12);
     $pdf->Cell(0, 10, 'Cedolino dimostrativo PoC');
@@ -86,6 +88,7 @@ test('document upload performs initial split and field extraction', function () 
     config([
         'filesystems.default' => 's3',
         'services.documents.classifier_driver' => 'bedrock',
+        'services.documents.ocr_driver' => 'bedrock',
     ]);
 
     Storage::fake('s3');
@@ -118,11 +121,11 @@ test('document upload performs initial split and field extraction', function () 
     $document = OriginalDocument::query()->first();
     Storage::disk('s3')->assertExists($document->file_path);
 
-    // Manually trigger the job to simulate queue processing in the test environment
-    (new \App\Poc\Jobs\ProcessOriginalDocumentJob($document))
-        ->handle(app(\App\Poc\Services\DocumentProcessingService::class));
+    // Manually trigger the job to simulate queue processing in the test environment.
+    (new ProcessOriginalDocumentJob($document))
+        ->handle(app(DocumentProcessingService::class));
 
-    // The stream only replays progress.
+    // The sync-queue path exits early after replaying generated progress events.
     $streamResponse = $this->get($uploadResponse->json('streamUrl'))->assertOk();
     ob_start();
     $streamResponse->baseResponse->sendContent();
@@ -135,4 +138,51 @@ test('document upload performs initial split and field extraction', function () 
     $this->get(route('poc.documents.preview', $subDocument))
         ->assertOk()
         ->assertHeader('content-type', 'application/pdf');
+});
+
+test('document upload uses local extraction when ocr driver is local', function () {
+    config([
+        'filesystems.default' => 's3',
+        'services.documents.classifier_driver' => 'bedrock',
+        'services.documents.ocr_driver' => 'local',
+        'services.bedrock.poc_confidence_threshold' => 72,
+    ]);
+
+    Storage::fake('s3');
+
+    $this->mock(BedrockService::class, function ($mock) {
+        $mock->shouldReceive('splitDocument')
+            ->once()
+            ->andReturn([
+                ['employee_name' => 'Mario Rossi', 'start_page' => 1, 'end_page' => 1],
+            ]);
+
+        $mock->shouldNotReceive('extractFields');
+    });
+
+    $uploadResponse = $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
+        ->assertStatus(202)
+        ->assertJsonStructure(['streamUrl']);
+
+    $document = OriginalDocument::query()->first();
+
+    (new ProcessOriginalDocumentJob($document))
+        ->handle(app(DocumentProcessingService::class));
+
+    $streamResponse = $this->get($uploadResponse->json('streamUrl'))->assertOk();
+    ob_start();
+    $streamResponse->baseResponse->sendContent();
+    ob_end_clean();
+
+    expect(ExtractedData::query()->first()->confidence_score)->toBe(72);
+});
+
+test('assistant generated metric counts every stored communication', function () {
+    Communication::factory()->draft()->create();
+    Communication::factory()->discarded()->create();
+
+    $this->getJson('/poc/api/state')
+        ->assertOk()
+        ->assertJsonPath('assistant.metrics.0.value', 2)
+        ->assertJsonPath('assistant.metrics.1.value', 1);
 });

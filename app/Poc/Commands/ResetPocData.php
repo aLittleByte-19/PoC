@@ -8,30 +8,14 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * Command for resetting POC processing data.
- */
 class ResetPocData extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
+    /** @var string */
     protected $signature = 'poc:reset-data {--force : Run without confirmation}';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
+    /** @var string */
     protected $description = 'Reset generated PoC processing data from the database and document storage.';
 
-    /**
-     * Execute the console command.
-     *
-     * @return int
-     */
     public function handle(): int
     {
         if (! $this->option('force') && ! $this->confirm('Reset all generated PoC processing data?')) {
@@ -56,10 +40,9 @@ class ResetPocData extends Command
     }
 
     /**
-     * Reset the specified database tables.
+     * Reset tables using the safest available strategy for the active database driver.
      *
      * @param  array<int, string>  $tables
-     * @return void
      */
     private function resetTables(array $tables): void
     {
@@ -109,11 +92,6 @@ class ResetPocData extends Command
         }
     }
 
-    /**
-     * Reset the document storage directories.
-     *
-     * @return void
-     */
     private function resetStorage(): void
     {
         $documentDisk = config('filesystems.default', 'local');
