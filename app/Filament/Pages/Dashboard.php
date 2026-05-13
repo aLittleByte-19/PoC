@@ -76,11 +76,11 @@ class Dashboard extends BaseDashboard
         $this->settings['aws_secret_access_key'] = '';
         $this->settings['aws_session_token'] = '';
 
-        Artisan::call('config:clear');
+        $this->refreshRuntimeConfiguration();
 
         Notification::make()
             ->title('Configurazione salvata')
-            ->body('I valori sono stati scritti nel file .env.')
+            ->body('I valori sono stati scritti nel file .env. La queue Redis ricaricherà i nuovi job con questa configurazione.')
             ->success()
             ->send();
     }
@@ -101,10 +101,11 @@ class Dashboard extends BaseDashboard
         $this->settings['aws_secret_access_key'] = '';
         $this->settings['aws_session_token'] = '';
 
-        Artisan::call('config:clear');
+        $this->refreshRuntimeConfiguration();
 
         Notification::make()
             ->title('Credenziali AWS rimosse')
+            ->body('La queue Redis è stata riavviata per riallineare i job successivi.')
             ->success()
             ->send();
     }
@@ -161,6 +162,12 @@ class Dashboard extends BaseDashboard
         }
 
         File::put($envPath, $contents);
+    }
+
+    private function refreshRuntimeConfiguration(): void
+    {
+        Artisan::call('config:clear');
+        Artisan::call('queue:restart');
     }
 
     /**
@@ -237,7 +244,7 @@ class Dashboard extends BaseDashboard
     }
 
     /**
-     * @return array{bedrock: string, credentials: string, analysis: string, ocr: string}
+     * @return array{bedrock: string, credentials: string, analysis: string, ocr: string, queue: string, storage: string}
      */
     public function getRuntimeStatusProperty(): array
     {
@@ -246,6 +253,8 @@ class Dashboard extends BaseDashboard
             'credentials' => $this->awsCredentialsStatus,
             'analysis' => $this->environmentValue('DOCUMENT_CLASSIFIER_DRIVER', 'fake') === 'bedrock' ? 'Bedrock' : 'Simulata',
             'ocr' => $this->environmentValue('DOCUMENT_OCR_DRIVER', 'local') === 'textract' ? 'Textract' : 'Locale',
+            'queue' => $this->environmentValue('QUEUE_CONNECTION', 'sync') === 'redis' ? 'Redis' : 'Sincrona',
+            'storage' => $this->environmentValue('FILESYSTEM_DISK', 'local') === 's3' ? 'MinIO / S3' : 'Locale',
         ];
     }
 

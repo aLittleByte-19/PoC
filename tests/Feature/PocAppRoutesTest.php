@@ -9,7 +9,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-
 uses(RefreshDatabase::class);
 
 function pocPdfUpload(string $filename = 'cedolino.pdf'): UploadedFile
@@ -84,7 +83,12 @@ test('ai assistant generation uses only prompt tone and style', function () {
 });
 
 test('document upload performs initial split and field extraction', function () {
-    Storage::fake('local');
+    config([
+        'filesystems.default' => 's3',
+        'services.documents.classifier_driver' => 'bedrock',
+    ]);
+
+    Storage::fake('s3');
 
     $this->mock(BedrockService::class, function ($mock) {
         $mock->shouldReceive('splitDocument')
@@ -111,8 +115,9 @@ test('document upload performs initial split and field extraction', function () 
         ->assertJsonStructure(['streamUrl']);
 
     expect(OriginalDocument::query()->count())->toBe(1);
+    Storage::disk('s3')->assertExists(OriginalDocument::query()->first()->file_path);
 
-    // Process via stream endpoint — must flush the callback manually in tests
+    // The sync test queue has already processed the job; the stream only replays progress.
     $streamResponse = $this->get($uploadResponse->json('streamUrl'))->assertOk();
     ob_start();
     $streamResponse->baseResponse->sendContent();

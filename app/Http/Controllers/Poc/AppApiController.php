@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Poc;
 use App\Enums\CommunicationStatus;
 use App\Enums\ProcessingStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessOriginalDocumentJob;
 use App\Models\Communication;
 use App\Models\ExtractedData;
 use App\Models\OriginalDocument;
@@ -77,28 +78,25 @@ class AppApiController extends Controller
         ], 201);
     }
 
-    public function runDocumentOcr(Request $request): JsonResponse
+    public function runDocumentOcr(Request $request, DocumentProcessingService $documents): JsonResponse
     {
         $validated = $request->validate([
             'document' => ['required', 'file', 'mimetypes:application/pdf', 'max:10240'],
         ]);
 
-        $path = $validated['document']->store('documents/originals', 'local');
+        $original = $documents->storeUpload($validated['document']);
 
-        $original = OriginalDocument::create([
-            'file_path' => $path,
-            'original_filename' => $validated['document']->getClientOriginalName(),
-            'processing_status' => ProcessingStatus::Pending,
-        ]);
+        ProcessOriginalDocumentJob::dispatch($original);
 
         return response()->json([
+            'message' => 'Documento caricato. Elaborazione avviata in coda.',
             'streamUrl' => route('poc.api.documents.stream', $original),
         ], 202);
     }
 
-    public function streamDocumentProcessing(OriginalDocument $originalDocument, DocumentProcessingService $documents): StreamedResponse
+    public function streamDocumentProcessing(OriginalDocument $originalDocument): StreamedResponse
     {
-        return response()->stream(function () use ($originalDocument, $documents): void {
+        return response()->stream(function () use ($originalDocument): void {
             set_time_limit(0);
 
             $send = function (string $event, array $data): void {
@@ -110,23 +108,63 @@ class AppApiController extends Controller
                 flush();
             };
 
-            try {
-                $originalDocument->update(['processing_status' => ProcessingStatus::Processing]);
+            $sentDocumentIds = [];
+            $startedAt = time();
+            $pendingTimeoutSeconds = 20;
+            $timeoutSeconds = 300;
 
-                $subDocuments = $documents->splitIntoSubDocuments($originalDocument);
+            while (! connection_aborted()) {
+                $freshDocument = OriginalDocument::query()
+                    ->with(['subDocuments' => fn ($query) => $query
+                        ->with(['originalDocument', 'extractedData'])
+                        ->orderBy('id')])
+                    ->find($originalDocument->id);
 
-                foreach ($subDocuments as $subDocument) {
-                    $documents->extractAndSaveFields($subDocument);
-                    $subDocument->refresh()->load(['originalDocument', 'extractedData']);
+                if (! $freshDocument) {
+                    $send('error', ['message' => 'Documento non trovato.']);
+
+                    return;
+                }
+
+                foreach ($freshDocument->subDocuments as $subDocument) {
+                    if (in_array($subDocument->id, $sentDocumentIds, true) || ! $subDocument->extractedData) {
+                        continue;
+                    }
+
+                    $sentDocumentIds[] = $subDocument->id;
                     $send('document', $this->serializeDocument($subDocument));
                 }
 
-                $originalDocument->update(['processing_status' => ProcessingStatus::Completed]);
-                $send('done', ['state' => $this->stateData()]);
-            } catch (\Throwable $e) {
-                Log::warning('PoC document stream processing failed', ['message' => $e->getMessage()]);
-                $originalDocument->update(['processing_status' => ProcessingStatus::Failed]);
-                $send('error', ['message' => $this->aiFailureMessage($e, 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.')]);
+                if ($freshDocument->processing_status === ProcessingStatus::Completed) {
+                    $send('done', ['state' => $this->stateData()]);
+
+                    return;
+                }
+
+                if ($freshDocument->processing_status === ProcessingStatus::Failed) {
+                    $send('error', ['message' => 'Analisi documento non disponibile. Verifica il PDF o la configurazione AI e riprova.']);
+
+                    return;
+                }
+
+                if (
+                    $freshDocument->processing_status === ProcessingStatus::Pending
+                    && time() - $startedAt >= $pendingTimeoutSeconds
+                ) {
+                    $freshDocument->update(['processing_status' => ProcessingStatus::Failed]);
+                    $send('error', ['message' => 'Elaborazione non avviata. Verifica che il worker Redis sia attivo e poi riprova il caricamento.']);
+
+                    return;
+                }
+
+                if (time() - $startedAt >= $timeoutSeconds) {
+                    Log::warning('PoC document stream timed out', ['original_id' => $originalDocument->id]);
+                    $send('error', ['message' => 'Elaborazione ancora in corso. Ricarica lo stato tra qualche secondo.']);
+
+                    return;
+                }
+
+                sleep(1);
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',
@@ -139,11 +177,11 @@ class AppApiController extends Controller
     {
         $original = $subDocument->originalDocument;
 
-        Storage::disk('local')->delete($subDocument->file_path);
+        Storage::disk($this->documentDisk())->delete($subDocument->file_path);
         $subDocument->delete();
 
         if ($original && $original->subDocuments()->doesntExist()) {
-            Storage::disk('local')->delete($original->file_path);
+            Storage::disk($this->documentDisk())->delete($original->file_path);
             $original->delete();
         }
 
@@ -155,11 +193,25 @@ class AppApiController extends Controller
 
     public function previewSubDocument(SubDocument $subDocument)
     {
-        abort_unless(Storage::disk('local')->exists($subDocument->file_path), 404);
+        $disk = Storage::disk($this->documentDisk());
+
+        abort_unless($disk->exists($subDocument->file_path), 404);
 
         $filename = $subDocument->originalDocument?->original_filename ?: 'documento.pdf';
 
-        return response()->file(Storage::disk('local')->path($subDocument->file_path), [
+        return response()->stream(function () use ($disk, $subDocument): void {
+            $stream = $disk->readStream($subDocument->file_path);
+
+            if (! is_resource($stream)) {
+                return;
+            }
+
+            try {
+                fpassthru($stream);
+            } finally {
+                fclose($stream);
+            }
+        }, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.str_replace('"', '', $filename).'"',
         ]);
@@ -273,5 +325,10 @@ class AppApiController extends Controller
         }
 
         return $fallback;
+    }
+
+    private function documentDisk(): string
+    {
+        return config('filesystems.default', 'local');
     }
 }

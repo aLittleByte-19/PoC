@@ -23,6 +23,7 @@
 /storage/*.key
 /storage/app/private/documents
 /storage/app/private/livewire-tmp
+/storage/app/tmp
 /storage/app/public/documents
 /storage/framework/poc-setup-complete
 /storage/pail

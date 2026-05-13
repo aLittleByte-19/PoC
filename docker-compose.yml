@@ -21,6 +21,21 @@ services:
       LARAVEL_SETUP_RETRIES: ${LARAVEL_SETUP_RETRIES:-30}
       POC_RESET_PROCESSING_DATA_ON_STARTUP: ${POC_RESET_PROCESSING_DATA_ON_STARTUP:-true}
       VIEW_COMPILED_PATH: ${VIEW_COMPILED_PATH:-/tmp/laravel-views}
+      DB_CONNECTION: ${DB_CONNECTION:-pgsql}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-nexum}
+      DB_USERNAME: ${DB_USERNAME:-nexum}
+      DB_PASSWORD: ${DB_PASSWORD:-nexum}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
+      AWS_STORAGE_ACCESS_KEY_ID: ${AWS_STORAGE_ACCESS_KEY_ID:-minioadmin}
+      AWS_STORAGE_SECRET_ACCESS_KEY: ${AWS_STORAGE_SECRET_ACCESS_KEY:-minioadmin}
+      AWS_STORAGE_SESSION_TOKEN: ${AWS_STORAGE_SESSION_TOKEN:-}
+      AWS_BUCKET: ${AWS_BUCKET:-nexum-local}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-http://minio:9000}
+      AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-true}
     volumes:
       - ./:/var/www/html
     depends_on:
@@ -32,6 +47,8 @@ services:
         condition: service_started
       minio:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
       mailpit:
         condition: service_started
     networks:
@@ -51,17 +68,38 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     command: php artisan queue:work redis --sleep=3 --tries=3 --timeout=120
+    restart: unless-stopped
     environment:
       COMPOSER_INSTALL_ON_STARTUP: ${COMPOSER_INSTALL_ON_STARTUP:-true}
       LARAVEL_WAIT_FOR_SETUP: ${LARAVEL_WAIT_FOR_SETUP:-true}
       LARAVEL_SETUP_WAIT_SECONDS: ${LARAVEL_SETUP_WAIT_SECONDS:-120}
       VIEW_COMPILED_PATH: ${VIEW_COMPILED_PATH:-/tmp/laravel-views}
+      DB_CONNECTION: ${DB_CONNECTION:-pgsql}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-nexum}
+      DB_USERNAME: ${DB_USERNAME:-nexum}
+      DB_PASSWORD: ${DB_PASSWORD:-nexum}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
+      AWS_STORAGE_ACCESS_KEY_ID: ${AWS_STORAGE_ACCESS_KEY_ID:-minioadmin}
+      AWS_STORAGE_SECRET_ACCESS_KEY: ${AWS_STORAGE_SECRET_ACCESS_KEY:-minioadmin}
+      AWS_STORAGE_SESSION_TOKEN: ${AWS_STORAGE_SESSION_TOKEN:-}
+      AWS_BUCKET: ${AWS_BUCKET:-nexum-local}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-http://minio:9000}
+      AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-true}
     volumes:
       - ./:/var/www/html
     depends_on:
-      - app
-      - postgres
-      - redis
+      app:
+        condition: service_started
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     networks:
       - poc
 
@@ -75,6 +113,21 @@ services:
       LARAVEL_WAIT_FOR_SETUP: ${LARAVEL_WAIT_FOR_SETUP:-true}
       LARAVEL_SETUP_WAIT_SECONDS: ${LARAVEL_SETUP_WAIT_SECONDS:-120}
       VIEW_COMPILED_PATH: ${VIEW_COMPILED_PATH:-/tmp/laravel-views}
+      DB_CONNECTION: ${DB_CONNECTION:-pgsql}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_DATABASE: ${DB_DATABASE:-nexum}
+      DB_USERNAME: ${DB_USERNAME:-nexum}
+      DB_PASSWORD: ${DB_PASSWORD:-nexum}
+      QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      FILESYSTEM_DISK: ${FILESYSTEM_DISK:-s3}
+      AWS_STORAGE_ACCESS_KEY_ID: ${AWS_STORAGE_ACCESS_KEY_ID:-minioadmin}
+      AWS_STORAGE_SECRET_ACCESS_KEY: ${AWS_STORAGE_SECRET_ACCESS_KEY:-minioadmin}
+      AWS_STORAGE_SESSION_TOKEN: ${AWS_STORAGE_SESSION_TOKEN:-}
+      AWS_BUCKET: ${AWS_BUCKET:-nexum-local}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-http://minio:9000}
+      AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-true}
     volumes:
       - ./:/var/www/html
     depends_on:
@@ -129,7 +182,7 @@ services:
       until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do
         sleep 2;
       done;
-      mc mb --ignore-existing local/${MINIO_BUCKET:-nexum-local};
+      mc mb --ignore-existing local/${AWS_BUCKET:-nexum-local};
       "
     networks:
       - poc

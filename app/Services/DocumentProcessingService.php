@@ -8,6 +8,7 @@ use App\Models\OriginalDocument;
 use App\Models\SubDocument;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use setasign\Fpdi\Fpdi;
@@ -17,11 +18,15 @@ class DocumentProcessingService
     public function __construct(private readonly BedrockService $bedrock) {}
 
     /**
-     * Store the uploaded PDF, trigger AI split, and persist SubDocuments.
+     * Store the uploaded PDF without starting the processing pipeline.
      */
-    public function handleUpload(UploadedFile $file): OriginalDocument
+    public function storeUpload(UploadedFile $file): OriginalDocument
     {
-        $path = $file->store('documents/originals', 'local');
+        $path = $file->store('documents/originals', $this->documentDisk());
+
+        if (! is_string($path) || $path === '') {
+            throw new \RuntimeException('Impossibile salvare il documento nello storage configurato.');
+        }
 
         $safeName = preg_replace('/[^\w.\-]/u', '_', $file->getClientOriginalName()) ?: 'documento.pdf';
 
@@ -29,19 +34,26 @@ class DocumentProcessingService
     }
 
     /**
-     * Create an OriginalDocument from a file that is already stored on the local disk.
+     * Store the uploaded PDF, trigger AI split, and persist SubDocuments.
+     */
+    public function handleUpload(UploadedFile $file): OriginalDocument
+    {
+        $original = $this->storeUpload($file);
+        $this->process($original);
+
+        return $original;
+    }
+
+    /**
+     * Create an OriginalDocument from a file that is already stored on the document disk.
      */
     public function handleStoredFile(string $path, string $filename): OriginalDocument
     {
-        $original = OriginalDocument::create([
+        return OriginalDocument::create([
             'file_path' => $path,
             'original_filename' => $filename,
             'processing_status' => ProcessingStatus::Pending,
         ]);
-
-        $this->process($original);
-
-        return $original;
     }
 
     /**
@@ -52,7 +64,7 @@ class DocumentProcessingService
     public function splitIntoSubDocuments(OriginalDocument $original): array
     {
         $segments = $this->normalizeSegments(
-            $this->bedrock->splitDocument($original->file_path),
+            $this->splitDocument($original->file_path),
             $original->file_path,
         );
 
@@ -83,7 +95,7 @@ class DocumentProcessingService
     public function extractAndSaveFields(SubDocument $subDocument): void
     {
         try {
-            $fields = $this->bedrock->extractFields($subDocument->file_path);
+            $fields = $this->extractFields($subDocument->file_path);
             ExtractedData::create(array_merge(
                 ['sub_document_id' => $subDocument->id],
                 $fields,
@@ -108,6 +120,8 @@ class DocumentProcessingService
             $segments = $this->normalizeSegments($this->splitDocument($original->file_path), $original->file_path);
 
             DB::transaction(function () use ($segments, $original): void {
+                $this->deleteSubDocuments($original);
+
                 foreach ($segments as $segment) {
                     $subPath = $this->extractPages(
                         $original->file_path,
@@ -125,7 +139,7 @@ class DocumentProcessingService
                     ]);
 
                     try {
-                        $fields = $this->bedrock->extractFields($subPath);
+                        $fields = $this->extractFields($subPath);
                         ExtractedData::create(array_merge(
                             ['sub_document_id' => $subDocument->id],
                             $fields,
@@ -197,6 +211,11 @@ class DocumentProcessingService
         ]);
     }
 
+    public function documentDisk(): string
+    {
+        return config('filesystems.default', 'local');
+    }
+
     /**
      * @return array<int, array{employee_name: string, start_page: int, end_page: int}>
      */
@@ -234,36 +253,86 @@ class DocumentProcessingService
     /**
      * Extract a page range from a PDF and write it to storage.
      *
-     * @return string Relative path within the local disk
+     * @return string Relative path within the configured document disk
      */
     private function extractPages(string $sourcePath, int $originalId, string $employeeName, int $startPage, int $endPage): string
     {
         $pdf = new Fpdi;
+        $absoluteSource = $this->copyStorageFileToTemporaryPath($sourcePath);
+        $absoluteDest = $this->temporaryPath('split_');
 
-        $absoluteSource = Storage::disk('local')->path($sourcePath);
-        $pageCount = $pdf->setSourceFile($absoluteSource);
+        try {
+            $pageCount = $pdf->setSourceFile($absoluteSource);
 
-        for ($page = $startPage; $page <= min($endPage, $pageCount); $page++) {
-            $tplIdx = $pdf->importPage($page);
-            $size = $pdf->getTemplateSize($tplIdx);
-            $pdf->AddPage($size['width'] > $size['height'] ? 'L' : 'P', [$size['width'], $size['height']]);
-            $pdf->useTemplate($tplIdx);
+            for ($page = $startPage; $page <= min($endPage, $pageCount); $page++) {
+                $tplIdx = $pdf->importPage($page);
+                $size = $pdf->getTemplateSize($tplIdx);
+                $pdf->AddPage($size['width'] > $size['height'] ? 'L' : 'P', [$size['width'], $size['height']]);
+                $pdf->useTemplate($tplIdx);
+            }
+
+            $slug = preg_replace('/[^a-z0-9_]/i', '_', $employeeName) ?: 'documento';
+            $relativePath = "documents/sub/{$originalId}_{$slug}_{$startPage}-{$endPage}.pdf";
+
+            $pdf->Output($absoluteDest, 'F');
+
+            if (! Storage::disk($this->documentDisk())->put($relativePath, File::get($absoluteDest))) {
+                throw new \RuntimeException("Impossibile salvare lo split PDF: {$relativePath}");
+            }
+
+            return $relativePath;
+        } finally {
+            File::delete([$absoluteSource, $absoluteDest]);
         }
-
-        $slug = preg_replace('/[^a-z0-9_]/i', '_', $employeeName);
-        $relativePath = "documents/sub/{$originalId}_{$slug}_{$startPage}-{$endPage}.pdf";
-        $absoluteDest = Storage::disk('local')->path($relativePath);
-
-        Storage::disk('local')->makeDirectory('documents/sub');
-        $pdf->Output($absoluteDest, 'F');
-
-        return $relativePath;
     }
 
     private function pageCount(string $sourcePath): int
     {
         $pdf = new Fpdi;
+        $absoluteSource = $this->copyStorageFileToTemporaryPath($sourcePath);
 
-        return max(1, $pdf->setSourceFile(Storage::disk('local')->path($sourcePath)));
+        try {
+            return max(1, $pdf->setSourceFile($absoluteSource));
+        } finally {
+            File::delete($absoluteSource);
+        }
+    }
+
+    private function copyStorageFileToTemporaryPath(string $storagePath): string
+    {
+        $contents = Storage::disk($this->documentDisk())->get($storagePath);
+
+        if ($contents === null || $contents === false) {
+            throw new \RuntimeException("File non trovato sullo storage documenti: {$storagePath}");
+        }
+
+        $temporaryPath = $this->temporaryPath('source_');
+        File::put($temporaryPath, $contents);
+
+        return $temporaryPath;
+    }
+
+    private function temporaryPath(string $prefix): string
+    {
+        $directory = storage_path('app/tmp/poc-processing');
+        File::ensureDirectoryExists($directory);
+
+        $path = tempnam($directory, $prefix);
+
+        if ($path === false) {
+            throw new \RuntimeException('Impossibile creare un file temporaneo per il processamento PDF.');
+        }
+
+        return $path;
+    }
+
+    private function deleteSubDocuments(OriginalDocument $original): void
+    {
+        $original->subDocuments()
+            ->get()
+            ->each(function (SubDocument $subDocument): void {
+                Storage::disk($this->documentDisk())->delete($subDocument->file_path);
+                $subDocument->delete();
+            });
     }
 }

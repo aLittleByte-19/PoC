@@ -47,6 +47,14 @@
                 <dt>OCR</dt>
                 <dd>{{ $this->runtimeStatus['ocr'] }}</dd>
             </div>
+            <div>
+                <dt>Queue</dt>
+                <dd>{{ $this->runtimeStatus['queue'] }}</dd>
+            </div>
+            <div>
+                <dt>Storage documenti</dt>
+                <dd>{{ $this->runtimeStatus['storage'] }}</dd>
+            </div>
         </dl>
 
         <form id="admin-settings-form" wire:submit="save" class="nexum-admin-grid">
@@ -119,6 +127,10 @@
                 <div class="nexum-form-grid">
                     <div class="nexum-field-note">
                         I campi credenziali sono sempre vuoti: inserisci un valore solo se vuoi sostituire quello salvato.
+                    </div>
+
+                    <div class="nexum-field-note">
+                        Al salvataggio la web app applica subito la nuova configurazione e la queue Redis viene riavviata per i job successivi.
                     </div>
 
                     <label class="nexum-field">

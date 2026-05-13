@@ -82,7 +82,7 @@ class BedrockService
 
         $this->ensureConfigured();
 
-        $pdfContent = Storage::disk('local')->get($pdfPath);
+        $pdfContent = Storage::disk($this->documentDisk())->get($pdfPath);
 
         if ($pdfContent === null) {
             throw new \RuntimeException("File non trovato sul disco: {$pdfPath}");
@@ -155,7 +155,7 @@ class BedrockService
 
         $this->ensureConfigured();
 
-        $pdfContent = Storage::disk('local')->get($subPdfPath);
+        $pdfContent = Storage::disk($this->documentDisk())->get($subPdfPath);
 
         if ($pdfContent === null) {
             throw new \RuntimeException("File non trovato sul disco: {$subPdfPath}");
@@ -218,5 +218,10 @@ class BedrockService
         if (! $this->client || ! $this->modelId) {
             throw new \RuntimeException('Bedrock non configurato: impostare BEDROCK_ENABLED=true e BEDROCK_MODEL_ID.');
         }
+    }
+
+    private function documentDisk(): string
+    {
+        return config('filesystems.default', 'local');
     }
 }

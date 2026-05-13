@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Jobs\ProcessOriginalDocumentJob;
 use App\Models\OriginalDocument;
 use App\Services\DocumentProcessingService;
 use Filament\Forms;
@@ -42,7 +43,7 @@ class DocumentIntake extends Page
                     ->schema([
                         Forms\Components\FileUpload::make('document')
                             ->label('Documento PDF')
-                            ->disk('local')
+                            ->disk(config('filesystems.default', 'local'))
                             ->directory('documents/originals')
                             ->acceptedFileTypes(['application/pdf'])
                             ->maxSize(10240)
@@ -73,12 +74,13 @@ class DocumentIntake extends Page
 
         try {
             $original = $documents->handleStoredFile($path, $filename);
+            ProcessOriginalDocumentJob::dispatch($original);
             $this->processedDocumentId = $original->id;
             $this->form->fill();
 
             Notification::make()
-                ->title('Documento analizzato')
-                ->body('Split iniziale e campi OCR sono disponibili nelle risorse Filament.')
+                ->title('Documento in elaborazione')
+                ->body('Il processamento è stato inviato alla queue Redis.')
                 ->success()
                 ->send();
         } catch (\Throwable $exception) {

@@ -4,8 +4,8 @@ namespace App\Filament\Resources;
 
 use App\Enums\ProcessingStatus;
 use App\Filament\Resources\OriginalDocumentResource\Pages;
+use App\Jobs\ProcessOriginalDocumentJob;
 use App\Models\OriginalDocument;
-use App\Services\DocumentProcessingService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
@@ -36,7 +36,7 @@ class OriginalDocumentResource extends Resource
                     ->schema([
                         Forms\Components\FileUpload::make('file_path')
                             ->label('PDF')
-                            ->disk('local')
+                            ->disk(config('filesystems.default', 'local'))
                             ->directory('documents/originals')
                             ->acceptedFileTypes(['application/pdf'])
                             ->maxSize(10240)
@@ -92,20 +92,12 @@ class OriginalDocumentResource extends Resource
                     ->icon('heroicon-m-cog-6-tooth')
                     ->requiresConfirmation()
                     ->action(function (OriginalDocument $record): void {
-                        try {
-                            app(DocumentProcessingService::class)->process($record);
+                        ProcessOriginalDocumentJob::dispatch($record);
 
-                            Notification::make()
-                                ->title('Documento processato')
-                                ->success()
-                                ->send();
-                        } catch (\Throwable $exception) {
-                            Notification::make()
-                                ->title('Processamento fallito')
-                                ->body($exception->getMessage())
-                                ->danger()
-                                ->send();
-                        }
+                        Notification::make()
+                            ->title('Processamento in coda')
+                            ->success()
+                            ->send();
                     }),
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),

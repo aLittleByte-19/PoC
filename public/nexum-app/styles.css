@@ -502,6 +502,13 @@ img {
   line-height: 1.3;
 }
 
+#detail-title,
+#detail-preview-title,
+#detail-preview-meta {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .panel-note,
 .status-message {
   margin: 0;
@@ -555,17 +562,20 @@ img {
 .field {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .field span {
   font-weight: 700;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .field input,
 .field select,
 .field textarea {
   width: 100%;
+  max-width: 100%;
   min-height: 46px;
   padding: 11px 12px;
   border: 1px solid var(--border);
@@ -858,6 +868,7 @@ img {
 .history-main {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .history-actions {
@@ -1012,6 +1023,8 @@ img {
 
 .history-main strong {
   line-height: 1.3;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .document-item {
@@ -1072,6 +1085,11 @@ img {
   display: grid;
   grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.45fr);
   gap: 14px;
+  align-items: start;
+}
+
+.document-detail-grid > * {
+  min-width: 0;
 }
 
 .document-preview,
@@ -1079,10 +1097,12 @@ img {
   display: grid;
   align-content: start;
   gap: 10px;
+  min-width: 0;
   padding: 16px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: var(--surface-muted);
+  overflow: hidden;
 }
 
 .document-preview {
@@ -1091,11 +1111,15 @@ img {
 
 .document-preview strong {
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .document-preview span {
   color: var(--muted);
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .preview-mode-row {
@@ -1242,6 +1266,8 @@ img {
   background: var(--surface);
   color: var(--muted);
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .document-preview-frame {
@@ -1262,6 +1288,7 @@ img {
   height: 420px;
   border: 0;
   background: var(--surface);
+  display: block;
 }
 
 .document-preview-lines.pdf-preview-mode {
@@ -1311,6 +1338,7 @@ img {
 
 .document-inspector {
   gap: 14px;
+  min-width: 0;
 }
 
 .inspector-heading {

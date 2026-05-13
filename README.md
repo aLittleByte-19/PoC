@@ -1,164 +1,81 @@
-# NEXUM / aLittleByte PoC
+# NEXUM / aLittleByte - Document Intelligence PoC
 
-Proof of Concept universitaria per sperimentare due funzioni centrali della piattaforma NEXUM/aLittleByte:
+Questa Proof of Concept (PoC) dimostra l'integrazione di intelligenza artificiale generativa e documentale all'interno dell'ecosistema NEXUM. Il prototipo abilita l'automazione di due processi critici: la generazione assistita di contenuti e l'elaborazione intelligente di flussi documentali (Co-Pilot CdL).
 
-- generazione assistita di contenuti tramite AI Assistant;
-- caricamento e analisi iniziale di documenti PDF per il Co-Pilot CdL.
+## Stack Tecnologico & Motivazioni
 
-L'applicazione e' pensata per una demo locale semplice: una singola interfaccia web pubblica, senza login, raggiungibile dalla root del progetto avviato in Docker.
+L'architettura è stata progettata per essere scalabile, modulare e facilmente integrabile in ambienti enterprise.
 
-## Stack locale
+*   **Backend: Laravel 12**
+    *   *Perché:* Garantisce robustezza, sicurezza e una gestione eccellente di code (Queues) e task asincroni, fondamentali per l'elaborazione documentale.
+*   **Admin Panel & UI: Filament PHP**
+    *   *Perché:* Consente di prototipare rapidamente interfacce di gestione dati (dashboard, tabelle, form) ad alte prestazioni, mantenendo un'esperienza utente coerente e professionale.
+*   **AI Engine: Amazon Bedrock (Model: Nova / Anthropic Claude)**
+    *   *Perché:* Offre l'accesso a modelli LLM state-of-the-art tramite API serverless. La PoC sfrutta le capacità native di analisi dei documenti (PDF) per evitare complessi passaggi di pre-elaborazione.
+*   **AI Worker Ausiliario: Python (FastAPI)**
+    *   *Perché:* Predisposto per task intensivi di computer vision e OCR locale. In questa fase agisce come microservizio di supporto per l'espansione della pipeline documentale.
+*   **Infrastruttura: Docker & Cloud Native Stack**
+    *   **PostgreSQL:** Database relazionale per la persistenza dei dati strutturati.
+    *   **Redis:** Gestione delle code di lavorazione e caching.
+    *   **MinIO:** Storage compatibile con lo standard S3 per la gestione sicura dei documenti originali e dei relativi split.
 
-- Laravel 12 come backend applicativo.
-- PostgreSQL come database.
-- Redis e Laravel Queue per lavorazioni asincrone.
-- Nginx e PHP-FPM per servire l'applicativo.
-- MinIO come storage S3-compatible locale.
-- Mailpit per eventuali test email locali.
-- AI worker FastAPI opzionale per OCR/parsing/split documentale.
-- Amazon Bedrock e Textract configurabili tramite variabili d'ambiente.
+## Flusso di Lavoro (Workflow)
 
-## Funzioni disponibili
+L'applicazione implementa una pipeline di elaborazione asincrona e reattiva:
 
-### AI Assistant
+### 1. Document Intelligence (Co-Pilot CdL)
+*   **Ingestion:** Il caricamento di documenti PDF massivi avviene tramite l'interfaccia pubblica. Il file viene immediatamente persistito su storage S3-compatible (MinIO).
+*   **Elaborazione in Coda:** Un job Laravel (`ProcessOriginalDocumentJob`) gestisce l'intero ciclo di vita del documento in background tramite Redis.
+*   **Analisi & Split Logico (Bedrock):** Il backend interroga Amazon Bedrock inviando il PDF originale. L'AI identifica logicamente i confini dei singoli documenti e i relativi destinatari.
+*   **Frammentazione Fisica:** Utilizzando la libreria **FPDI**, il sistema seziona fisicamente il PDF originale in file indipendenti salvati nello storage.
+*   **Estrazione Sequenziale:** Ogni frammento viene rielaborato singolarmente da Bedrock per estrarre metadati strutturati e calcolare il **Confidence Score**.
+*   **Real-time Streaming (SSE):** Il frontend rimane in ascolto su un endpoint **Server-Sent Events**. Man mano che ogni sotto-documento viene completato, l'interfaccia si aggiorna dinamicamente senza ricaricamento.
 
-La sezione `AI Assistant > Generazione` permette di:
+### 2. AI Content Assistant
+*   **Prompt Engineering:** L'utente fornisce i parametri di input (testo, tono, stile). Il sistema applica dei template di sistema per contestualizzare la richiesta ad Amazon Bedrock.
+*   **Generazione Bozza:** L'LLM restituisce un oggetto JSON strutturato. Il backend lo trasforma in una risorsa `Communication` in stato "Bozza", pronta per essere editata o finalizzata dall'utente.
 
-- inserire un prompt testuale;
-- selezionare tono e stile;
-- generare una bozza composta da titolo e testo;
-- visualizzare e revisionare localmente il risultato.
 
-Di default la generazione usa un driver fake deterministico, utile per provare il flusso senza credenziali AWS. Se Bedrock viene configurato, la stessa interfaccia puo' inviare la richiesta al servizio reale.
+## Amministrazione & Configurazione (Dashboard)
 
-### Co-Pilot CdL
+L'applicativo include un'area di amministrazione dedicata al percorso `/admin`, denominata **Amministrazione PoC**. A differenza di un back-office tradizionale, questa dashboard funge da centro di controllo operativo per il comportamento dell'intelligenza artificiale e del runtime di sistema.
 
-La sezione `Co-Pilot CdL > Caricamento` permette di:
+*   **Punto di Accesso:** `http://localhost:8080/admin`
+*   **Configurazione Dinamica AI:** Permette di modificare in tempo reale i driver di elaborazione (passando da simulazione a Bedrock/Textract reale), impostare i modelli LLM (es. Amazon Nova) e variare le soglie di confidenza per l'estrazione dati.
+*   **Gestione Credenziali:** Interfaccia sicura per l'inserimento e la verifica delle chiavi IAM AWS, con feedback immediato sullo stato della connessione.
+*   **Controllo Runtime:** Funzionalità integrate per il riavvio della coda Redis, la pulizia della cache di sistema e il reset completo dei dati di elaborazione per scopi di demo.
+*   **Persistenza:** Ogni modifica effettuata nella dashboard viene scritta direttamente nel file `.env`, rendendo le configurazioni persistenti anche dopo il riavvio dei container.
 
-- caricare un PDF;
-- salvare il documento nel sistema;
-- avviare una prima elaborazione di split;
-- rilevare i campi principali del documento;
-- consultare lo storico dei documenti rilevati;
-- aprire il dettaglio con campi OCR, anteprima dello split e preview PDF.
+## Installazione Rapida
 
-La PoC non implementa ancora una pipeline documentale completa: split robusto, OCR avanzato, matching destinatario e revisione human-in-the-loop sono predisposti come punti di evoluzione.
-
-## Avvio rapido
-
-Copia la configurazione di esempio:
-
-```bash
-cp .env.example .env
-```
-
-Avvia lo stack locale:
-
-```bash
-docker compose up -d --build
-```
-
-Al primo avvio il container `app`:
-
-- installa le dipendenze Composer se necessario;
-- genera `APP_KEY` se manca;
-- esegue le migrazioni;
-- prepara l'applicazione per l'uso locale.
-
-Quando i container sono attivi, apri:
-
-```text
-http://localhost:8080/
-```
-
-Servizi di supporto:
-
-- MinIO console: `http://localhost:9001`
-- Mailpit: `http://localhost:8025`
-- AI worker healthcheck: `http://localhost:8001/health`
-
-## Comandi utili
-
-Eseguire le migrazioni manualmente:
-
-```bash
-docker compose exec app php artisan migrate
-```
-
-Lanciare i test:
-
-```bash
-docker compose exec app php artisan test
-```
-
-Pulire cache Laravel:
-
-```bash
-docker compose exec app php artisan optimize:clear
-```
-
-Rigenerare autoload Composer:
-
-```bash
-docker compose exec app composer dump-autoload
-```
+1.  **Configurazione Ambiente:**
+    ```bash
+    cp .env.example .env
+    ```
+2.  **Avvio Stack:**
+    ```bash
+    docker compose up -d --build
+    ```
+3.  **Accesso:**
+    *   Applicazione: `http://localhost:8080`
+    *   Mailpit (Mail Test): `http://localhost:8025`
+    *   MinIO Console: `http://localhost:9001`
 
 ## Configurazione AI
 
-La configurazione locale usa valori sicuri per la demo:
+Il sistema supporta driver `fake` per test locali senza costi e driver `real` per integrazione con AWS:
 
 ```env
-AI_GENERATOR_DRIVER=fake
-DOCUMENT_OCR_DRIVER=local
-DOCUMENT_CLASSIFIER_DRIVER=fake
-BEDROCK_ENABLED=false
-TEXTRACT_ENABLED=false
-```
-
-Per provare Amazon Bedrock reale con credenziali IAM temporanee, abilita il servizio e imposta modello, region e credenziali tramite `.env` locale o variabili d'ambiente non versionate:
-
-```env
+AI_GENERATOR_DRIVER=bedrock  # o fake
+DOCUMENT_OCR_DRIVER=local    # o textract
 BEDROCK_ENABLED=true
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
-DOCUMENT_OCR_DRIVER=local
-TEXTRACT_ENABLED=false
-AWS_DEFAULT_REGION=eu-north-1
-AWS_ACCESS_KEY_ID=<access-key>
-AWS_SECRET_ACCESS_KEY=<secret-key>
-AWS_SESSION_TOKEN=<session-token-se-temporaneo>
 ```
 
-Per la PoC documentale usiamo Bedrock per split iniziale ed estrazione campi, lasciando Textract spento per evitare la dipendenza da bucket S3/SNS/IAM. I modelli Anthropic possono richiedere un inference profile e accesso Marketplace; `amazon.nova-lite-v1:0` e' il default consigliato per prove rapide con le credenziali IAM temporanee. Le credenziali generate dal portale AWS IAM Identity Center sono temporanee: quando scadono vanno sostituite nel file `.env` locale o riesportate nell'ambiente.
+*Nota: Le credenziali IAM per Bedrock sono gestite tramite variabili d'ambiente standard AWS.*
 
-## Storage locale
-
-Per default lo storage usa MinIO con API S3-compatible:
-
-```env
-FILESYSTEM_DISK=s3
-AWS_ENDPOINT=http://minio:9000
-AWS_BUCKET=nexum-local
-AWS_USE_PATH_STYLE_ENDPOINT=true
-```
-
-Il servizio `minio-init` crea automaticamente il bucket locale configurato da `MINIO_BUCKET`.
-
-## Note operative
-
-- L'applicazione corrente funziona senza autenticazione.
-- L'interfaccia principale e' servita solo da `/`.
-- Le API della PoC sono sotto `/poc/api/*`.
-- I task asincroni usano Redis tramite il servizio `queue`.
-- Se il browser mostra asset vecchi, ricarica forzatamente la pagina: CSS e JS sono comunque versionati automaticamente in base alla modifica dei file.
-
-## Limiti intenzionali
-
-Questa PoC dimostra i flussi principali, non una soluzione enterprise completa. Sono volutamente lasciati come evoluzioni successive:
-
-- autenticazione e gestione ruoli;
-- workflow completo di approvazione;
-- invio email reale;
-- OCR/Textract completo;
-- split documentale avanzato;
-- matching destinatario;
-- metriche avanzate e audit trail esteso.
+## Obiettivi della PoC
+Dimostrare la fattibilità tecnica di:
+*   Riduzione del 90% del tempo di data-entry manuale tramite OCR/AI.
+*   Automazione dello splitting di documenti massivi multi-destinatario.
+*   Standardizzazione della qualità delle comunicazioni aziendali tramite AI generativa.

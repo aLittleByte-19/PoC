@@ -12,7 +12,7 @@ class ResetPocData extends Command
 {
     protected $signature = 'poc:reset-data {--force : Run without confirmation}';
 
-    protected $description = 'Reset generated PoC processing data from the database and local storage.';
+    protected $description = 'Reset generated PoC processing data from the database and document storage.';
 
     public function handle(): int
     {
@@ -90,11 +90,16 @@ class ResetPocData extends Command
 
     private function resetStorage(): void
     {
+        $documentDisk = config('filesystems.default', 'local');
+
+        Storage::disk($documentDisk)->deleteDirectory('documents');
+        Storage::disk($documentDisk)->deleteDirectory('livewire-tmp');
+
         Storage::disk('local')->deleteDirectory('documents');
         Storage::disk('local')->deleteDirectory('livewire-tmp');
         Storage::disk('public')->deleteDirectory('documents');
 
+        File::deleteDirectory(storage_path('app/tmp/poc-processing'));
         File::deleteDirectory(base_path('documenti_ocr'));
     }
 }
-

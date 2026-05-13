@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\OriginalDocumentResource\Pages;
 
 use App\Filament\Resources\OriginalDocumentResource;
-use App\Services\DocumentProcessingService;
+use App\Jobs\ProcessOriginalDocumentJob;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 
@@ -13,20 +13,12 @@ class CreateOriginalDocument extends CreateRecord
 
     protected function afterCreate(): void
     {
-        try {
-            app(DocumentProcessingService::class)->process($this->record);
+        ProcessOriginalDocumentJob::dispatch($this->record);
 
-            Notification::make()
-                ->title('Documento processato')
-                ->body('Split iniziale e campi rilevati sono stati salvati.')
-                ->success()
-                ->send();
-        } catch (\Throwable $exception) {
-            Notification::make()
-                ->title('Documento salvato, analisi fallita')
-                ->body($exception->getMessage())
-                ->danger()
-                ->send();
-        }
+        Notification::make()
+            ->title('Documento in elaborazione')
+            ->body('Il processamento è stato inviato alla queue Redis.')
+            ->success()
+            ->send();
     }
 }
