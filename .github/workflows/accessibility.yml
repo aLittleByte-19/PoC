@@ -1,0 +1,62 @@
+name: Accessibility
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - migration/full-blade
+  pull_request:
+
+jobs:
+  accessibility:
+    name: Axe and Pa11y
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Start application
+        run: docker compose up -d --build
+
+      - name: Wait for application
+        run: |
+          for attempt in {1..120}; do
+            if curl --silent --fail http://localhost:8080 > /dev/null; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker compose logs
+          exit 1
+
+      - name: Run axe
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          npx --yes @axe-core/cli http://localhost:8080
+          npx --yes @axe-core/cli http://localhost:8080/admin
+
+      - name: Run Pa11y
+        env:
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: |
+          npx --yes pa11y http://localhost:8080
+          npx --yes pa11y http://localhost:8080/admin
+
+      - name: Stop application
+        if: always()
+        run: docker compose down --volumes --remove-orphans

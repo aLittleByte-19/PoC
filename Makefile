@@ -14,7 +14,7 @@ help:
 	@echo "  $(BLUE)make setup$(RESET)     Costruisce l'ambiente da zero"
 
 test:
-	docker compose exec app ./vendor/bin/pest
+	docker compose exec -T app ./vendor/bin/pest
 
 fresh:
 	docker compose exec app php artisan migrate:fresh --seed

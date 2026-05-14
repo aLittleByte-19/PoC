@@ -1,63 +1,37 @@
 # NEXUM / aLittleByte - Document Intelligence PoC
 
-Proof of Concept per validare l'integrazione di AI generativa e AI documentale nei flussi NEXUM. Il prototipo copre due casi d'uso principali:
+<p align="center">
+  <a href="https://github.com/aLittleByte-19/PoC/actions/workflows/pint.yml"><img alt="Pint" src="https://img.shields.io/github/actions/workflow/status/aLittleByte-19/PoC/pint.yml?branch=develop&label=Pint&style=flat-square"></a>
+  <a href="https://github.com/aLittleByte-19/PoC/actions/workflows/pest.yml"><img alt="Pest" src="https://img.shields.io/github/actions/workflow/status/aLittleByte-19/PoC/pest.yml?branch=develop&label=Pest&style=flat-square"></a>
+  <a href="https://github.com/aLittleByte-19/PoC/actions/workflows/accessibility.yml"><img alt="Accessibility" src="https://img.shields.io/github/actions/workflow/status/aLittleByte-19/PoC/accessibility.yml?branch=develop&label=A11y&style=flat-square"></a>
+</p>
+
+Proof of Concept per validare l'uso di AI generativa e AI documentale nei flussi NEXUM.
+
+La PoC copre due casi d'uso:
 
 * generazione assistita di comunicazioni HR;
-* analisi di PDF multi-destinatario, split dei documenti e estrazione di metadati strutturati.
+* analisi di PDF multi-destinatario, divisione in sotto-documenti ed estrazione di dati strutturati.
 
-La PoC nasce per essere dimostrabile in locale senza costi AI, ma può essere collegata ad Amazon Bedrock per test realistici su modelli LLM/documentali.
+La demo funziona in locale anche senza servizi AI reali. Quando serve una prova più realistica, può essere collegata ad Amazon Bedrock.
 
-## Stack Tecnologico
+## Scope della PoC
 
-* **Backend: Laravel 12**
-  Gestisce routing, validazione, persistenza, code Redis e job asincroni.
-* **UI: Blade + CSS/JS custom**
-  Mantiene l'esperienza applicativa leggera e aderente ai flussi demo, senza introdurre pannelli esterni.
-* **AI: Amazon Bedrock**
-  Driver opzionale per generazione contenuti, analisi PDF e estrazione dati. Il modello predefinito è `amazon.nova-lite-v1:0`, configurabile da `.env` o dashboard.
-* **Infrastruttura locale: Docker, PostgreSQL, Redis, MinIO**
-  PostgreSQL persiste i dati, Redis gestisce la coda, MinIO simula uno storage S3-compatible per originali e split PDF.
+La PoC serve a verificare:
 
-## Workflow
+* se un PDF con più destinatari può essere diviso automaticamente in documenti separati;
+* se i dati principali dei documenti possono essere precompilati per ridurre il data-entry manuale;
+* se un assistente AI può generare bozze di comunicazioni HR controllabili dall'utente;
+* se l'esperienza locale è sufficientemente fluida per una demo end-to-end.
 
-### Document Intelligence (Co-Pilot CdL)
+Il flusso è pensato per restare utilizzabile anche quando l'estrazione dei campi non riesce: il sotto-documento resta visibile e può essere verificato manualmente.
 
-1. L'utente carica un PDF dall'interfaccia PoC.
-2. Il file originale viene salvato su storage S3-compatible, di default MinIO.
-3. `ProcessOriginalDocumentJob` elabora il documento in background tramite Redis.
-4. Il classifier configurato identifica i segmenti:
-   * `fake`: restituisce un segmento demo deterministico;
-   * `bedrock`: invia il PDF ad Amazon Bedrock e chiede i confini logici dei documenti.
-5. FPDI genera fisicamente i PDF split e li salva nello storage.
-6. L'OCR configurato estrae i campi:
-   * `local`: produce dati demo deterministici;
-   * `bedrock`: invia ogni split ad Amazon Bedrock per estrazione strutturata.
-7. Il frontend riceve aggiornamenti progressivi via Server-Sent Events.
+## Stack
 
-### AI Content Assistant
-
-1. L'utente inserisce prompt, tono e stile.
-2. Il backend costruisce un prompt HR-oriented per Bedrock.
-3. La risposta JSON viene salvata come `Communication` in stato `draft`.
-4. In modalità AI disabilitata, il servizio restituisce una bozza simulata.
-
-## Amministrazione PoC
-
-La dashboard locale è disponibile su:
-
-```text
-http://localhost:8080/admin
-```
-
-Da qui si possono:
-
-* passare da simulazione locale a Bedrock reale;
-* impostare modello Bedrock, soglia di confidenza e driver documento;
-* inserire o rimuovere credenziali AWS per la demo;
-* resettare i dati generati dalla PoC;
-* riavviare la configurazione runtime e la coda.
-
-Le impostazioni vengono scritte nel file `.env`. Questo è comodo per una PoC locale, ma non sostituisce un secret manager in un ambiente di produzione.
+* **Laravel 12** per backend, validazione, persistenza e code.
+* **Blade + CSS/JS custom** per l'interfaccia della PoC.
+* **Docker, PostgreSQL, Redis e MinIO** per l'ambiente locale.
+* **Amazon Bedrock** opzionale per generazione contenuti, split documentale ed estrazione dati.
 
 ## Installazione Rapida
 
@@ -79,9 +53,11 @@ Le impostazioni vengono scritte nel file `.env`. Questo è comodo per una PoC lo
    * Admin PoC: `http://localhost:8080/admin`
    * MinIO Console: `http://localhost:9001`
 
-## Configurazione AI
+L'entrypoint Docker installa le dipendenze, prepara Laravel e applica le migrazioni al primo avvio.
 
-La configurazione predefinita è sicura per una demo locale: Bedrock è disabilitato, lo split è simulato e l'estrazione OCR usa un fallback locale.
+## Configurazione
+
+La configurazione predefinita è adatta alla demo locale: Bedrock è disabilitato, lo split è simulato e l'estrazione OCR usa dati dimostrativi.
 
 ```env
 BEDROCK_ENABLED=false
@@ -109,56 +85,30 @@ Valori supportati:
 * `DOCUMENT_OCR_DRIVER`: `local` oppure `bedrock`
 * `BEDROCK_ENABLED`: `false` per simulazione, `true` per chiamate reali
 
-Le variabili Textract restano presenti in `.env.example` ma sono disattivate per questa PoC.
-
-## Code e Timeout
-
-La pipeline documentale può richiedere più tempo di una normale richiesta HTTP. Per questo lo stack usa Redis queue e un worker dedicato:
+Le stesse impostazioni possono essere gestite dalla dashboard admin:
 
 ```text
-php artisan queue:work redis --sleep=3 --tries=3 --timeout=330
+http://localhost:8080/admin
 ```
 
-Il retry Redis è allineato tramite:
+Da qui si possono cambiare modello Bedrock, driver documentali, soglia di confidenza, credenziali AWS e dati demo. Le impostazioni vengono salvate nel file `.env`.
 
-```env
-REDIS_QUEUE_RETRY_AFTER=360
-```
+Le variabili Textract sono presenti in `.env.example`, ma sono disattivate per questa PoC.
 
-## Organizzazione del Codice
+## Test
 
-Il codice specifico della PoC vive in `app/Poc`:
-
-* `Controllers`: endpoint applicativi e dashboard admin;
-* `Models`: documenti originali, split, dati estratti e comunicazioni;
-* `Services`: integrazione Bedrock e pipeline documentale;
-* `Jobs`: lavorazioni asincrone;
-* `Requests`: validazione input;
-* `Enums`: stati condivisi;
-* `Commands`: utility operative, incluso reset dati.
-
-Le view sono in `resources/views/poc`; CSS, JS e asset statici sono in `public/poc`.
-
-## Verifiche
-
-Comandi principali:
+Per eseguire la suite:
 
 ```bash
+make test
+```
+
+Comandi utili:
+
+```bash
+make fresh
+make logs
 docker compose exec -T app ./vendor/bin/pint --test
-docker compose exec -T app ./vendor/bin/pest
 ```
 
-Per controllare il worker:
-
-```bash
-docker compose top queue
-```
-
-## Obiettivi della PoC
-
-La PoC serve a validare:
-
-* fattibilità dello split automatico di PDF multi-destinatario;
-* riduzione del data-entry manuale tramite estrazione assistita;
-* qualità e controllabilità delle comunicazioni generate con AI;
-* integrazione tra Laravel, code Redis, storage S3-compatible e servizi AI AWS.
+`make fresh` resetta database e dati generati dalla PoC. `make logs` mostra i log dei container principali.

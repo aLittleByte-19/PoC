@@ -181,6 +181,88 @@ test('document upload uses local extraction when ocr driver is local', function 
     expect(ExtractedData::query()->first()->confidence_score)->toBe(72);
 });
 
+test('document processing clamps model page ranges to the uploaded pdf page count', function () {
+    config([
+        'filesystems.default' => 's3',
+        'services.documents.classifier_driver' => 'bedrock',
+        'services.documents.ocr_driver' => 'local',
+    ]);
+
+    Queue::fake();
+    Storage::fake('s3');
+
+    $this->mock(BedrockService::class, function ($mock) {
+        $mock->shouldReceive('splitDocument')
+            ->once()
+            ->andReturn([
+                ['employee_name' => 'Mario Rossi', 'start_page' => 5, 'end_page' => 10],
+            ]);
+
+        $mock->shouldNotReceive('extractFields');
+    });
+
+    $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
+        ->assertStatus(202);
+
+    $document = OriginalDocument::query()->first();
+    (new ProcessOriginalDocumentJob($document))
+        ->handle(app(DocumentProcessingService::class));
+
+    $subDocument = SubDocument::query()->first();
+
+    expect($subDocument->start_page)->toBe(1)
+        ->and($subDocument->end_page)->toBe(1)
+        ->and($document->refresh()->processing_status->value)->toBe('completed')
+        ->and($document->error_message)->toBeNull();
+});
+
+test('document processing keeps split visible when field extraction fails', function () {
+    config([
+        'filesystems.default' => 's3',
+        'services.documents.classifier_driver' => 'bedrock',
+        'services.documents.ocr_driver' => 'bedrock',
+    ]);
+
+    Queue::fake();
+    Storage::fake('s3');
+
+    $expectedMessage = 'Le credenziali AWS temporanee sono scadute. Aggiorna AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN nel pannello admin.';
+
+    $this->mock(BedrockService::class, function ($mock) {
+        $mock->shouldReceive('splitDocument')
+            ->once()
+            ->andReturn([
+                ['employee_name' => 'Mario Rossi', 'start_page' => 1, 'end_page' => 1],
+            ]);
+
+        $mock->shouldReceive('extractFields')
+            ->once()
+            ->andThrow(new RuntimeException('ExpiredToken: token expired'));
+    });
+
+    $this->postJson('/poc/api/documents/ocr', ['document' => pocPdfUpload()])
+        ->assertStatus(202);
+
+    $document = OriginalDocument::query()->first();
+    (new ProcessOriginalDocumentJob($document))
+        ->handle(app(DocumentProcessingService::class));
+
+    $subDocument = SubDocument::query()->first();
+    $extractedData = ExtractedData::query()->first();
+
+    expect(SubDocument::query()->count())->toBe(1)
+        ->and($subDocument->error_message)->toBe($expectedMessage)
+        ->and($extractedData->employee_first_name)->toBeNull()
+        ->and($extractedData->confidence_score)->toBeNull()
+        ->and($document->refresh()->processing_status->value)->toBe('completed')
+        ->and($document->error_message)->toBeNull();
+
+    $this->getJson('/poc/api/state')
+        ->assertOk()
+        ->assertJsonPath('copilot.documents.0.error', $expectedMessage)
+        ->assertJsonPath('copilot.documents.0.previewLines.3', 'Errore estrazione: '.$expectedMessage);
+});
+
 test('assistant generated metric counts every stored communication', function () {
     Communication::factory()->draft()->create();
     Communication::factory()->discarded()->create();

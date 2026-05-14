@@ -8,6 +8,7 @@
 /.codex
 /.cursor/
 /.claude
+/.mcp.json
 /.specify
 /.idea
 /.nova
@@ -32,6 +33,7 @@ __pycache__/
 *.py[cod]
 .venv/
 CLAUDE.md
+boost.json
 /specs
 _ide_helper.php
 Homestead.json

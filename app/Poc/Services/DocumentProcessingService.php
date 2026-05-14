@@ -46,14 +46,18 @@ class DocumentProcessingService
     {
         try {
             $fields = $this->extractFields($subDocument->file_path);
-            ExtractedData::create(array_merge(
+            $subDocument->update(['error_message' => null]);
+            ExtractedData::updateOrCreate(
                 ['sub_document_id' => $subDocument->id],
                 $fields,
-            ));
+            );
         } catch (\Throwable $e) {
             Log::error('DocumentProcessingService: extraction failed', [
                 'sub_document_id' => $subDocument->id,
                 'message' => $e->getMessage(),
+            ]);
+            $subDocument->update([
+                'error_message' => BedrockService::formatUserError($e, 'Estrazione campi non disponibile. Verifica la configurazione AI nel pannello admin.'),
             ]);
             $this->createEmptyExtractedData($subDocument);
         }
@@ -68,6 +72,11 @@ class DocumentProcessingService
         $absoluteSource = null;
 
         try {
+            $original->update([
+                'processing_status' => ProcessingStatus::Processing,
+                'error_message' => null,
+            ]);
+
             $absoluteSource = $this->copyStorageFileToTemporaryPath($original->file_path);
             $pdf = new Fpdi;
             $pageCount = max(1, $pdf->setSourceFile($absoluteSource));
@@ -82,11 +91,20 @@ class DocumentProcessingService
 
             foreach ($segments as $segment) {
                 $preparedSegment = $this->prepareSplitSegment($original, $segment, $absoluteSource);
-                $subDocument = $this->createSubDocumentFromPreparedSegment($original, $preparedSegment);
+                try {
+                    $subDocument = $this->createSubDocumentFromPreparedSegment($original, $preparedSegment);
+                } catch (\Throwable $e) {
+                    $this->deleteStoragePaths([$preparedSegment['file_path']]);
+
+                    throw $e;
+                }
                 $this->extractAndSaveFields($subDocument);
             }
 
-            $original->update(['processing_status' => ProcessingStatus::Completed]);
+            $original->update([
+                'processing_status' => ProcessingStatus::Completed,
+                'error_message' => null,
+            ]);
         } catch (\Throwable $e) {
             $this->handleProcessingFailure($original, $e);
         } finally {
@@ -202,7 +220,7 @@ class DocumentProcessingService
         }
 
         return array_values(array_map(function (array $segment) use ($pageCount): array {
-            $startPage = max(1, (int) ($segment['start_page'] ?? 1));
+            $startPage = min($pageCount, max(1, (int) ($segment['start_page'] ?? 1)));
             $endPage = min($pageCount, max($startPage, (int) ($segment['end_page'] ?? $startPage)));
 
             return [
@@ -215,8 +233,7 @@ class DocumentProcessingService
 
     private function createEmptyExtractedData(SubDocument $subDocument): void
     {
-        ExtractedData::create([
-            'sub_document_id' => $subDocument->id,
+        ExtractedData::updateOrCreate(['sub_document_id' => $subDocument->id], [
             'employee_first_name' => null,
             'employee_last_name' => null,
             'company_name' => null,

@@ -286,6 +286,15 @@ class AppApiController
         ])));
         $confidence = $data?->confidence_score;
         $pages = max(1, ((int) $subDocument->end_page - (int) $subDocument->start_page) + 1);
+        $previewLines = [
+            'Split iniziale: pagine '.$subDocument->start_page.'-'.$subDocument->end_page.'.',
+            'File originale: '.($original?->original_filename ?: 'Non disponibile').'.',
+            'Campi OCR rilevati dal servizio AI configurato o dal fallback PoC.',
+        ];
+
+        if ($subDocument->error_message) {
+            $previewLines[] = 'Errore estrazione: '.$subDocument->error_message;
+        }
 
         return [
             'id' => 'sub-'.$subDocument->id,
@@ -298,12 +307,9 @@ class AppApiController
             'type' => $data?->document_type,
             'description' => $data?->description,
             'confidence' => $confidence,
+            'error' => $subDocument->error_message,
             'previewUrl' => route('poc.documents.preview', ['subDocument' => $subDocument->id]),
-            'previewLines' => [
-                'Split iniziale: pagine '.$subDocument->start_page.'-'.$subDocument->end_page.'.',
-                'File originale: '.($original?->original_filename ?: 'Non disponibile').'.',
-                'Campi OCR rilevati dal servizio AI configurato o dal fallback PoC.',
-            ],
+            'previewLines' => $previewLines,
         ];
     }
 }

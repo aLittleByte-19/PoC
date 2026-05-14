@@ -18,6 +18,7 @@ class SubDocument extends Model
         'start_page',
         'end_page',
         'send_status',
+        'error_message',
     ];
 
     /**
