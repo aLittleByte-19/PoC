@@ -22,9 +22,11 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Setup Chrome
-        id: chrome
-        uses: browser-actions/setup-chrome@v1
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts=false
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
 
       - name: Start application
         run: docker compose up -d --build
@@ -43,21 +45,12 @@ jobs:
           exit 1
 
       - name: Run axe
-        env:
-          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
-          npm_config_ignore_scripts: "false"
-        run: |
-          npx --yes --ignore-scripts=false @axe-core/cli --chrome-path "$CHROME_PATH" --chrome-options="no-sandbox,disable-dev-shm-usage" http://localhost:8080
-          npx --yes --ignore-scripts=false @axe-core/cli --chrome-path "$CHROME_PATH" --chrome-options="no-sandbox,disable-dev-shm-usage" http://localhost:8080/admin
+        run: node scripts/a11y/axe-playwright.mjs http://localhost:8080 http://localhost:8080/admin
 
       - name: Run Pa11y
-        env:
-          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
-          PUPPETEER_SKIP_DOWNLOAD: "true"
-          npm_config_ignore_scripts: "false"
         run: |
-          npx --yes --ignore-scripts=false pa11y http://localhost:8080
-          npx --yes --ignore-scripts=false pa11y http://localhost:8080/admin
+          npx pa11y http://localhost:8080
+          npx pa11y http://localhost:8080/admin
 
       - name: Stop application
         if: always()
