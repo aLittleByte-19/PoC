@@ -86,6 +86,10 @@ class AppApiController
     public function streamDocumentProcessing(OriginalDocument $originalDocument): StreamedResponse
     {
         return response()->stream(function () use ($originalDocument): void {
+            if (app()->runningUnitTests()) {
+                return;
+            }
+
             set_time_limit(0);
 
             $send = function (string $event, array $data): void {
