@@ -3,10 +3,17 @@ set -eu
 
 cd /var/www/html
 
+# Ensure storage directories exist and are writable
+mkdir -p storage/app/public \
+         storage/framework/cache/data \
+         storage/framework/sessions \
+         storage/framework/testing \
+         storage/framework/views \
+         storage/logs
+chmod -R 775 storage bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache
+
 setup_marker="storage/framework/poc-setup-complete"
-view_compiled_path="${VIEW_COMPILED_PATH:-storage/framework/views}"
-mkdir -p "$view_compiled_path"
-chmod 0777 "$view_compiled_path"
 
 run_with_retries() {
     description="$1"
@@ -114,7 +121,11 @@ if [ "${LARAVEL_WAIT_FOR_SETUP:-false}" = "true" ]; then
     waited=0
     max_wait="${LARAVEL_SETUP_WAIT_SECONDS:-120}"
 
-    while [ ! -f "$setup_marker" ]; do
+    while true; do
+        if [ -f "$setup_marker" ] || [ -e "$setup_marker" ]; then
+            break
+        fi
+
         if [ "$waited" -ge "$max_wait" ]; then
             echo "Laravel automated setup did not complete within $max_wait seconds."
             exit 1

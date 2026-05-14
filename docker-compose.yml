@@ -7,6 +7,8 @@ services:
       - "${NGINX_PORT:-8080}:80"
     volumes:
       - ./:/var/www/html:ro
+      - vendor:/var/www/html/vendor:ro
+      - storage:/var/www/html/storage:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       - poc
@@ -39,6 +41,9 @@ services:
       AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-true}
     volumes:
       - ./:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage:/var/www/html/storage
+      - ./docker/php/entrypoint.sh:/usr/local/bin/poc-entrypoint:ro
     depends_on:
       postgres:
         condition: service_started
@@ -80,6 +85,9 @@ services:
       AWS_USE_PATH_STYLE_ENDPOINT: ${AWS_USE_PATH_STYLE_ENDPOINT:-true}
     volumes:
       - ./:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage:/var/www/html/storage
+      - ./docker/php/entrypoint.sh:/usr/local/bin/poc-entrypoint:ro
     depends_on:
       app:
         condition: service_started
@@ -150,3 +158,5 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  vendor:
+  storage:

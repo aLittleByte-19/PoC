@@ -32,6 +32,19 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 
 WORKDIR /var/www/html
 
+# Install dependencies first to leverage Docker cache
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --no-scripts --no-autoloader --prefer-dist
+
+# Copy the rest of the application
+COPY . .
+
+# Finish composer installation
+RUN composer dump-autoload --no-interaction --optimize \
+    && composer_hash=$(sha256sum composer.lock | awk '{ print $1 }') \
+    && echo "$composer_hash" > vendor/.composer-lock.false.sha256 \
+    && echo "$composer_hash" > vendor/.composer-lock.true.sha256
+
 COPY docker/php/entrypoint.sh /usr/local/bin/poc-entrypoint
 RUN chmod +x /usr/local/bin/poc-entrypoint
 

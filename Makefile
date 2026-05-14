@@ -31,6 +31,5 @@ restart:
 
 setup:
 	docker compose up -d --build
-	docker compose exec app composer install
-	docker compose exec app php artisan key:generate
-	docker compose exec app php artisan migrate --force
+	@echo "$(BLUE)L'ambiente è stato configurato ed è in fase di avvio.$(RESET)"
+	@echo "$(BLUE)Puoi monitorare il progresso con: make logs$(RESET)"
